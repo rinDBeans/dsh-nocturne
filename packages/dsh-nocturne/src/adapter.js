@@ -193,6 +193,9 @@ function watchWhite() {
   let total = 0;
   let budget = 0;
   let windowStart = 0;
+  /** 回车之后的一小段是"闪白"的现场：这段时间里凡是有底色的新元素都记。 */
+  let armedUntil = 0;
+  const arm = () => { armedUntil = performance.now() + 2500; };
   const near = (value) => {
     const match = /^rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*([\d.]+))?\)$/.exec(value);
     if (!match) return false;
@@ -208,7 +211,15 @@ function watchWhite() {
     // 整场最多记 40 次，只留最近 12 条：流式输出时新节点很多，不能无限记账。
     if (node.nodeType !== 1 || total >= 40) return;
     const style = getComputedStyle(node);
-    if (!near(style.backgroundColor)) return;
+    // 平时只记近白（可疑的卡片）；发送窗口里凡是有底色的都记——
+    // 因为气泡的底色未必是白的，光靠"找白色"会漏掉它。
+    const inWindow = performance.now() < armedUntil;
+    if (!near(style.backgroundColor)) {
+      if (!inWindow) return;
+      const alpha = /rgba?\([^)]*,\s*([\d.]+)\)$/.exec(style.backgroundColor);
+      if (style.backgroundColor === 'rgba(0, 0, 0, 0)') return;
+      if (alpha && Number(alpha[1]) < 0.5) return;
+    }
     // 不按尺寸筛：入场动画第一帧常常是 scale(0)，那一帧的盒子就是 0×0，
     // 而"闪白"恰恰发生在那一帧——按尺寸筛会把最该抓的那一次筛掉。
     const box = node.getBoundingClientRect();
@@ -246,7 +257,45 @@ function watchWhite() {
     }
   });
   if (document.body) observer.observe(document.body, {childList: true, subtree: true});
-  return {observer: observer, hits: hits};
+  return {observer: observer, hits: hits, arm: arm};
+}
+
+/**
+ * 层级审计：谁被画在纸层之上？
+ *
+ * "闪白"的机理只可能是那一个——白 × 纸 = 纸，所以纸层下面的任何白色都不可能显白。
+ * 于是不必猜元素，直接扫所有带 z-index 的定位元素，凡层级高于纸层的都记下来。
+ * 一次全表扫描约几十毫秒，只在发送那一刻跑一次，不进帧循环。
+ */
+function auditStacking() {
+  const floor = 2147482000;
+  const found = [];
+  const label = (el) => {
+    const cls = String(el.className || '').split(' ').filter(Boolean).slice(0, 2).join('.');
+    return el.tagName.toLowerCase() + (cls ? '.' + cls : '');
+  };
+  let scanned = 0;
+  for (const el of document.querySelectorAll('body *')) {
+    if (scanned > 12000 || found.length >= 10) break;
+    scanned += 1;
+    const style = getComputedStyle(el);
+    if (style.position === 'static') continue;
+    const z = Number(style.zIndex);
+    if (!isFinite(z) || z <= floor) continue;
+    if (el.hasAttribute && el.hasAttribute(PAPER_ATTR)) continue;
+    found.push({
+      el: label(el),
+      z: z,
+      position: style.position,
+      bg: style.backgroundColor,
+      opacity: style.opacity,
+      pointer: style.pointerEvents,
+      blend: style.mixBlendMode,
+      anim: style.animationName.slice(0, 20),
+      box: [Math.round(el.getBoundingClientRect().width), Math.round(el.getBoundingClientRect().height)]
+    });
+  }
+  return {scanned: scanned, above: found};
 }
 
 /**
@@ -541,6 +590,29 @@ function mount() {
   document.addEventListener('selectionchange', onSelection);
   document.addEventListener('visibilitychange', onVisibility);
 
+  /**
+   * 发送窗口：回车之后 1.5 秒内是"闪白"的现场，只在这时候做一次层级审计。
+   * 不做常驻轮询——一次全表 getComputedStyle 是几十毫秒。
+   */
+  const onKeyForAudit = (event) => {
+    if (event.key !== 'Enter' || event.shiftKey) return;
+    white.arm();
+    setTimeout(() => {
+      try {
+        const audit = auditStacking();
+        lastDiag = lastDiag || {};
+        lastDiag.above = audit.above;
+        lastDiag.scanned = audit.scanned;
+        persist();
+      } catch (error) {
+        lastDiag = lastDiag || {};
+        lastDiag.auditError = String(error).slice(0, 160);
+        persist();
+      }
+    }, 900);
+  };
+  document.addEventListener('keydown', onKeyForAudit, true);
+
   measureSheet();
   frameId = requestAnimationFrame(frame);
 
@@ -771,6 +843,15 @@ function mount() {
       }
       return lastDiag;
     },
+    /** 手动跑一次层级审计（谁在纸层之上）。 */
+    above() {
+      const audit = auditStacking();
+      lastDiag = lastDiag || {};
+      lastDiag.above = audit.above;
+      lastDiag.scanned = audit.scanned;
+      persist();
+      return audit;
+    },
     /** 这次会话里抓到的近白表面。 */
     white() {
       return white.hits.slice();
@@ -802,6 +883,7 @@ function mount() {
     window.removeEventListener('resize', reposition);
     document.removeEventListener('selectionchange', onSelection);
     document.removeEventListener('visibilitychange', onVisibility);
+    document.removeEventListener('keydown', onKeyForAudit, true);
     paperCanvas.removeEventListener('webglcontextlost', onContextLost);
     paperCanvas.removeEventListener('webglcontextrestored', onContextRestored);
     white.observer.disconnect();
