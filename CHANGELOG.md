@@ -3,6 +3,28 @@
 版本号语义：`MAJOR.MINOR.PATCH`。`MINOR` 意味着新增可感知的能力（新的纸、光标形态、面板控件），
 `PATCH` 只修观感与缺陷。DSH 主版本跃迁时，插件跟随一次 `MAJOR`。
 
+## 0.3.3 — 2026-10-28
+
+修与 dsh-claude-style 的消息气泡动画冲突：发送时气泡背景闪白。
+
+**原因**：claude-style 的气泡是 `background: var(--dsw-specific-bubble)`，它给这个 token 的值是
+**`#f4f2f3`**（近白）；入场动画 `dsh-claude-enter-grow` 又是 `transform: scale(0) → scale(1)`
+——纯 transform 动画会把元素提成合成层。于是发送那一刻，气泡按 `#f4f2f3` 原色画出来，
+在纸上一闪就是白，动画结束又回到被纸光乘过的样子。
+
+**修法**：把宿主的五个"组件表面"token 一起按纸调色，写在 `body` 上：
+`--dsw-specific-bubble`（7% 墨）、`-input-major`（5%）、`-menu`（4%）、`-selector`（6%）、
+`-sidebar-fill`（3%）。
+
+- **为什么写 body 而不是根元素**：claude-style 把这些 token 定义在 `body[data-dsh-claude-style]`
+  上，根元素上的值只是"继承"，继承输给本地声明。内联在 body 上带 `!important` 才压得住。
+- **为什么朝墨色混而不是直接给纸色**：深色纸上 `paper().ink` 是浅的，同一条公式在夜纸上会自动
+  变成"略亮的纸"，不用两套值。
+- 气泡因此不再是一张浮在纸上的白卡片，而是纸上压出来的一层；输入框、菜单、选择器、侧栏同理。
+- 卸载时连同这五个 token 一起还原。
+
+实测（桩页，气泡与同一行的纸面）：气泡 184/167/144，纸面 185/175/165——同一亮度，只是更暖一点。
+
 ## 0.3.2 — 2026-10-28
 
 选区换成纸自己的颜色。

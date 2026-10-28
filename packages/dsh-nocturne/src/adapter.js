@@ -18,6 +18,18 @@ const TOKEN_NAMES = ['--dsw-alias-bg-base', '--dsw-alias-bg-module-platform', '-
   '--dsw-alias-bg-layer-2', '--dsw-alias-label-primary', '--dsw-alias-label-secondary',
   '--dsw-alias-label-tertiary', '--dn-paper', '--dn-ink', '--dn-caret-ink', '--dn-light-rgb',
   '--dn-metal-lo', '--dn-metal-hi', '--dn-metal', '--dn-sheet', '--dn-selection'];
+/** 宿主/别家皮肤在 body 上定义的组件表面：气泡、输入框、菜单、选择器、侧栏。 */
+const SURFACE_NAMES = ['--dsw-specific-bubble', '--dsw-specific-input-major', '--dsw-specific-menu',
+  '--dsw-specific-selector', '--dsw-specific-sidebar-fill'];
+/** 每一层要往墨色里压多少：气泡最实，侧栏最淡。 */
+const SURFACE_MIX = {
+  '--dsw-specific-bubble': 0.07,
+  '--dsw-specific-input-major': 0.05,
+  '--dsw-specific-menu': 0.04,
+  '--dsw-specific-selector': 0.06,
+  '--dsw-specific-sidebar-fill': 0.03
+};
+
 let remoteTimer = 0;
 let lastDiag = null;
 /** 卡顿记录：只留最后 12 条，随设置文档一起落盘，用来在拿不到界面时定位卡死。 */
@@ -200,11 +212,32 @@ function tokenMap(p) {
   };
 }
 
+/**
+ * 表面色单独写一份，而且写在 body 上：
+ * claude-style 把这些 token 定义在 body[data-dsh-claude-style] 上，
+ * 只写根元素的话会被它自己的声明盖住（继承输给本地声明）。
+ * 气泡不该是浮在纸上的白卡片——它就是纸上压出来的一层。
+ */
+function applySurfaces() {
+  const body = document.body;
+  if (!body) return;
+  for (const name of SURFACE_NAMES) {
+    body.style.setProperty(name, surfaceColor(SURFACE_MIX[name]), 'important');
+  }
+}
+
+function clearSurfaces() {
+  const body = document.body;
+  if (!body) return;
+  for (const name of SURFACE_NAMES) body.style.removeProperty(name);
+}
+
 function clearTokens() {
   for (const name of TOKEN_NAMES) document.documentElement.style.removeProperty(name);
 }
 
 function applyTokens() {
+  applySurfaces();
   // 「只叠材质」：一个宿主配色 token 都不碰，只留纸与灯——两套皮肤可以叠着用。
   if (tokenMode() === 'material') {
     clearTokens();
@@ -675,6 +708,7 @@ function mount() {
     // token 还原：撤掉内联覆盖，宿主的主题立刻回来。
     clearTimeout(remoteTimer);
     for (const name of TOKEN_NAMES) document.documentElement.style.removeProperty(name);
+    clearSurfaces();
     delete window.__dshNocturne;
   };
 }

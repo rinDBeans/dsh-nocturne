@@ -202,6 +202,26 @@ DSH 桌面版每次启动把 web 服务端口设成 0（随机端口），GUI �
 | 只叠材质 | 不写任何 `--dsw-alias-*`，只画纸与灯——两套皮肤叠着用 |
 | 接管配色 | 内联 `!important`；内联 important 高于它样式表里的 important，所以本皮肤赢 |
 
+### 组件表面：气泡、输入框、菜单
+
+它把这些"表面"定义成 `--dsw-specific-*`，浅色口径下气泡是 `#f4f2f3`——一张浮在纸上的白卡片。
+这里按纸重算，写在 **body** 上（它把这些 token 定义在 `body[data-dsh-claude-style]` 上，
+根元素只是继承，继承输给本地声明）：
+
+| token | 混墨比例 | 用在哪 |
+| --- | --- | --- |
+| `--dsw-specific-bubble` | 7% | 消息气泡 |
+| `--dsw-specific-input-major` | 5% | 输入框 |
+| `--dsw-specific-menu` | 4% | 菜单 |
+| `--dsw-specific-selector` | 6% | 选择器 |
+| `--dsw-specific-sidebar-fill` | 3% | 侧栏 |
+
+朝**墨色**混而不是直接刷纸色：深色纸上 `paper().ink` 是浅的，同一条公式在夜纸上自动变成
+"略亮的纸"，不需要两套值。
+
+顺手修掉了气泡动画的闪白：入场动画是 `transform: scale(0) → scale(1)`，会把元素提成合成层，
+那一瞬间它按 `#f4f2f3` 原色画在纸上；改成纸的调子之后，这一跳几乎看不出来。
+
 ![桌面版共存（桩测试：冒充宿主持久化 + 冒充 claude-style 在场）](previews/dsh-desktop-coexist.png)
 
 上图是桩测试的实际输出：磁盘设置取回了 `night / midnight-study / quill`，

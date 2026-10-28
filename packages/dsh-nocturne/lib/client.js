@@ -4,8 +4,8 @@
  * 纸、灯、辉光三层的渲染代码由 tools/build.mjs 从 sample/nocturne-desk.html 抽取；
  * 上游配方来自 Chaosnap/Typewriter-Nocturne（MIT），随包保留其版权行。
  *
- *   核心 1830 行 · 适配 703 行 · 样式 70 行
- *   样张 sample/nocturne-desk.html（119277 bytes）
+ *   核心 1842 行 · 适配 737 行 · 样式 70 行
+ *   样张 sample/nocturne-desk.html（119896 bytes）
  */
 window.__ModuleLoader__.load({
   id: 'dsh-nocturne',
@@ -116,6 +116,18 @@ function washColor() {
   const p = paper();
   const t = theme();
   return p.appearance === 'dark' ? p.selection : (t.selection || p.selection);
+}
+
+/**
+ * 纸面上的"另一层纸"：把纸色朝墨色调一点。
+ * 气泡、输入框、菜单、侧栏都用它——整扇窗是一张纸，这些是纸上压出来的一层，
+ * 不是浮在纸上的一张白卡片。深色纸上 ink 是浅的，所以这条在夜纸上会自动变成"略亮"。
+ */
+function surfaceColor(amount) {
+  const base = toUnit(paper().paper);
+  const ink = toUnit(paper().ink);
+  const mixed = [0, 1, 2].map((i) => Math.round((base[i] * (1 - amount) + ink[i] * amount) * 255));
+  return '#' + mixed.map((v) => Math.max(0, Math.min(255, v)).toString(16).padStart(2, '0')).join('');
 }
 
 /**
@@ -1867,6 +1879,18 @@ const TOKEN_NAMES = ['--dsw-alias-bg-base', '--dsw-alias-bg-module-platform', '-
   '--dsw-alias-bg-layer-2', '--dsw-alias-label-primary', '--dsw-alias-label-secondary',
   '--dsw-alias-label-tertiary', '--dn-paper', '--dn-ink', '--dn-caret-ink', '--dn-light-rgb',
   '--dn-metal-lo', '--dn-metal-hi', '--dn-metal', '--dn-sheet', '--dn-selection'];
+/** 宿主/别家皮肤在 body 上定义的组件表面：气泡、输入框、菜单、选择器、侧栏。 */
+const SURFACE_NAMES = ['--dsw-specific-bubble', '--dsw-specific-input-major', '--dsw-specific-menu',
+  '--dsw-specific-selector', '--dsw-specific-sidebar-fill'];
+/** 每一层要往墨色里压多少：气泡最实，侧栏最淡。 */
+const SURFACE_MIX = {
+  '--dsw-specific-bubble': 0.07,
+  '--dsw-specific-input-major': 0.05,
+  '--dsw-specific-menu': 0.04,
+  '--dsw-specific-selector': 0.06,
+  '--dsw-specific-sidebar-fill': 0.03
+};
+
 let remoteTimer = 0;
 let lastDiag = null;
 /** 卡顿记录：只留最后 12 条，随设置文档一起落盘，用来在拿不到界面时定位卡死。 */
@@ -2049,11 +2073,32 @@ function tokenMap(p) {
   };
 }
 
+/**
+ * 表面色单独写一份，而且写在 body 上：
+ * claude-style 把这些 token 定义在 body[data-dsh-claude-style] 上，
+ * 只写根元素的话会被它自己的声明盖住（继承输给本地声明）。
+ * 气泡不该是浮在纸上的白卡片——它就是纸上压出来的一层。
+ */
+function applySurfaces() {
+  const body = document.body;
+  if (!body) return;
+  for (const name of SURFACE_NAMES) {
+    body.style.setProperty(name, surfaceColor(SURFACE_MIX[name]), 'important');
+  }
+}
+
+function clearSurfaces() {
+  const body = document.body;
+  if (!body) return;
+  for (const name of SURFACE_NAMES) body.style.removeProperty(name);
+}
+
 function clearTokens() {
   for (const name of TOKEN_NAMES) document.documentElement.style.removeProperty(name);
 }
 
 function applyTokens() {
+  applySurfaces();
   // 「只叠材质」：一个宿主配色 token 都不碰，只留纸与灯——两套皮肤可以叠着用。
   if (tokenMode() === 'material') {
     clearTokens();
@@ -2524,6 +2569,7 @@ function mount() {
     // token 还原：撤掉内联覆盖，宿主的主题立刻回来。
     clearTimeout(remoteTimer);
     for (const name of TOKEN_NAMES) document.documentElement.style.removeProperty(name);
+    clearSurfaces();
     delete window.__dshNocturne;
   };
 }
