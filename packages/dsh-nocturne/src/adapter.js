@@ -260,6 +260,40 @@ function watchWhite() {
   return {observer: observer, hits: hits, arm: arm};
 }
 
+/** 把一个颜色字符串拆成 0–1 的通道与 alpha；认 #hex、rgb()、color(srgb …)。 */
+function parseColor(value) {
+  const text = String(value || '').trim();
+  let match = /^#([0-9a-f]{6})$/i.exec(text);
+  if (match) {
+    return [0, 2, 4].map((i) => parseInt(match[1].slice(i, i + 2), 16) / 255).concat(1);
+  }
+  match = /^rgba?\(([^)]+)\)$/.exec(text);
+  if (match) {
+    const parts = match[1].split(/[,/]/).map((v) => v.trim()).filter(Boolean);
+    if (parts.length >= 3) {
+      return [Number(parts[0]) / 255, Number(parts[1]) / 255, Number(parts[2]) / 255,
+        parts[3] === undefined ? 1 : Number(parts[3])];
+    }
+  }
+  match = /^color\(srgb\s+([^)]+)\)$/.exec(text);
+  if (match) {
+    const parts = match[1].split(/[\s/]+/).filter(Boolean);
+    if (parts.length >= 3) {
+      return [Number(parts[0]), Number(parts[1]), Number(parts[2]),
+        parts[3] === undefined ? 1 : Number(parts[3])];
+    }
+  }
+  return null;
+}
+
+/** 实心且近白：这类表面在 multiply 之下会比纸亮一档，正是"闪白"的来源。 */
+function isBrightSurface(value) {
+  const rgba = parseColor(value);
+  if (!rgba) return false;
+  if (rgba[3] < 0.85) return false;
+  return Math.min(rgba[0], rgba[1], rgba[2]) > 0.88;
+}
+
 /**
  * 层级审计：谁被画在纸层之上？
  *
@@ -295,7 +329,54 @@ function auditStacking() {
       box: [Math.round(el.getBoundingClientRect().width), Math.round(el.getBoundingClientRect().height)]
     });
   }
-  return {scanned: scanned, above: found};
+  // 第二遍：实心近白的表面（按面积从大到小）。气泡就在这一类里。
+  const bright = [];
+  for (const el of document.querySelectorAll('body *')) {
+    if (bright.length >= 8) break;
+    if (el.hasAttribute && el.hasAttribute(PAPER_ATTR)) continue;
+    const box = el.getBoundingClientRect();
+    if (box.width * box.height < 400) continue;
+    const style = getComputedStyle(el);
+    if (!isBrightSurface(style.backgroundColor)) continue;
+    bright.push({
+      el: label(el),
+      bg: style.backgroundColor,
+      z: style.zIndex,
+      radius: style.borderRadius,
+      parent: el.parentElement ? label(el.parentElement) : '',
+      box: [Math.round(box.width), Math.round(box.height)],
+      area: Math.round(box.width * box.height)
+    });
+  }
+  bright.sort((a, b) => b.area - a.area);
+  return {scanned: scanned, above: found, bright: bright};
+}
+
+/** 宿主那套 token 里仍然是近白的——这些是能直接改的东西。 */
+function auditTokens() {
+  const names = new Set();
+  for (const sheet of document.styleSheets) {
+    let rules;
+    try { rules = sheet.cssRules; } catch (error) { continue; }
+    if (!rules) continue;
+    for (const rule of rules) {
+      const text = rule.cssText;
+      if (!text || text.indexOf('--dsw') < 0) continue;
+      const found = text.match(/--dsw-[a-z0-9-]+/g);
+      if (found) for (const name of found) names.add(name);
+      if (names.size > 300) break;
+    }
+    if (names.size > 300) break;
+  }
+  const body = getComputedStyle(document.body);
+  const bright = [];
+  for (const name of names) {
+    const value = body.getPropertyValue(name).trim();
+    if (!value || !isBrightSurface(value)) continue;
+    bright.push(name + '=' + value.slice(0, 40));
+    if (bright.length >= 30) break;
+  }
+  return {total: names.size, bright: bright};
 }
 
 /**
@@ -603,6 +684,8 @@ function mount() {
         lastDiag = lastDiag || {};
         lastDiag.above = audit.above;
         lastDiag.scanned = audit.scanned;
+        lastDiag.bright = audit.bright;
+        lastDiag.tokens = auditTokens();
         persist();
       } catch (error) {
         lastDiag = lastDiag || {};
@@ -849,6 +932,8 @@ function mount() {
       lastDiag = lastDiag || {};
       lastDiag.above = audit.above;
       lastDiag.scanned = audit.scanned;
+      lastDiag.bright = audit.bright;
+      lastDiag.tokens = auditTokens();
       persist();
       return audit;
     },
