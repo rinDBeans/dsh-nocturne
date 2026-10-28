@@ -30,6 +30,18 @@ sample/nocturne-desk.html
   ?lamp=0                                 # 关灯
 ```
 
+## 桌面版
+
+DSH 桌面版每次启动端口随机，GUI origin 每次都变，`localStorage` 会失效。
+所以这个插件带**宿主半**：设置在 `$DSH_HOME/cache/dsh-nocturne/settings.json`，
+客户端启动时取回来（取不到才用本地缓存）。桌面版与 web 版共用同一份浏览器代码。
+
+## 与 dsh-claude-style 共存
+
+装了两套皮肤时，默认「自动」：探测到 claude-style 在覆盖同一批配色 token，就让位成
+**只叠材质**——保留它的配色与形状，只把纸与灯叠上去。想让它接管配色，在缮写室里把「共存」
+切成「接管配色」（内联 `!important`，优先级更高）。
+
 ## 装进 DSH
 
 ```bash

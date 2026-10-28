@@ -673,6 +673,8 @@ const SETTINGS = {
   particles:.45,
   texture:1,
   cursorMode:'ink',
+  // auto：探测到别的皮肤在改同一批 token 时，只叠纸与灯，不去抢它的配色
+  coexist:'auto',
   // 窗光自成一组：上游的 Studio 里窗格数、斜度、柔边都是独立参数，
   // 不能借台灯的 softness（借了就是一团糊，达不到截图里那种 3×2 的方窗）。
   window:{x:.5, y:.5, columns:3, rows:2, softness:.15, slant:0}
@@ -1422,6 +1424,15 @@ class InkCaret {
     this.halo.animate(FRESH_HALO, {duration: 240, easing: 'ease-out'});
   }
 
+  /** 换形态（墨迹 / 羽毛 / 原生）。要立刻生效，所以顺手把下一次测量标记为脏。 */
+  setMode(mode) {
+    if (mode !== 'ink' && mode !== 'quill' && mode !== 'none') return;
+    this.mode = mode;
+    this.hide();
+    this.dirty = true;
+    this.lastMeasure = 0;
+  }
+
   /** 把宿主的原生光标藏起来之前先确认我们的墨块在场，否则用户会看不到光标。 */
   claimNative() {
     if (!this.editor || this.editor.__dnNativeClaimed) return;
@@ -1729,6 +1740,11 @@ const STUDIO_PAPERS = [
   {id: 'parchment', name: '羊皮'},
   {id: 'night', name: '夜纸'}
 ];
+const STUDIO_COEXIST = [
+  {id: 'auto', name: '自动'},
+  {id: 'material', name: '只叠材质'},
+  {id: 'full', name: '接管配色'}
+];
 const STUDIO_CURSORS = [
   {id: 'ink', name: '墨迹'},
   {id: 'quill', name: '羽毛'},
@@ -1763,6 +1779,8 @@ function buildStudio(options) {
     + '<button class="toggle" type="button" role="switch" aria-checked="true" aria-label="台灯"></button></div></div>');
   part.push('<div class="group" data-group="sliders"></div>');
   part.push('<div class="group"><h3>光标</h3><div class="grid" data-group="cursor"></div></div>');
+  part.push('<div class="group"><h3>共存</h3><div class="grid" data-group="coexist"></div>'
+    + '<p class="note" data-group="coexist-hint" hidden></p></div>');
   part.push('<div class="group"><p class="note">纸、灯、墨的色值与纸面参数取自 Typewriter-Nocturne（MIT）。'
     + '这里的每一项都直接改渲染参数，改完即见。</p></div>');
   root.innerHTML = part.join('');
@@ -1797,6 +1815,9 @@ function buildStudio(options) {
   }
   for (const item of STUDIO_CURSORS) {
     groupOf('cursor').appendChild(choiceButton(item.id, item.name, null));
+  }
+  for (const item of STUDIO_COEXIST) {
+    groupOf('coexist').appendChild(choiceButton(item.id, item.name, null));
   }
 
   const reads = [];
@@ -1870,6 +1891,25 @@ function buildStudio(options) {
     mark('theme', state.theme);
     mark('paper', state.paper);
     mark('cursor', state.cursorMode);
+    mark('coexist', state.coexist);
+    // 探测到别的皮肤在改同一批 token 时，明说一句，并给出一键切换。
+    const hint = root.querySelector('[data-group="coexist-hint"]');
+    const foreign = typeof options.foreign === 'function' ? options.foreign() : null;
+    const resolved = typeof options.resolvedCoexist === 'function'
+      ? options.resolvedCoexist()
+      : (state.coexist === 'auto' ? (foreign ? 'material' : 'full') : state.coexist);
+    if (hint) {
+      if (foreign) {
+        hint.hidden = false;
+        const why = state.coexist === 'auto' ? '已自动让位：' : '';
+        hint.textContent = '检测到 ' + foreign + ' 正在覆盖同一批配色 token。'
+          + (resolved === 'material'
+            ? why + '只叠纸与灯，两套皮肤可以叠着用。'
+            : why + '本皮肤接管配色——两套同时改同一批 token，谁后加载谁赢。');
+      } else {
+        hint.hidden = true;
+      }
+    }
     toggle.setAttribute('aria-checked', String(state.lamp));
     for (const read of reads) read();
   }
@@ -2066,8 +2106,7 @@ studio = buildStudio({
     if (key === 'theme') { applyTheme(value); return; }
     if (key === 'cursor') {
       SETTINGS.cursorMode = value;
-      inkCaret.mode = value;
-      inkCaret.hide();
+      inkCaret.setMode(value);
       studio.sync();
       return;
     }

@@ -8,6 +8,17 @@ const PAPER_ATTR = 'data-dn';
 const STYLE_ID = 'dsh-nocturne-style';
 const STORE_KEY = 'dsh-nocturne:settings';
 const STORE_VERSION = 1;
+/** 宿主半（lib/index.js）在这个路径上读写同一个 JSON 文档。 */
+const REMOTE_PATH = '/dsh-nocturne/settings';
+const SETTING_KEYS = ['paper', 'theme', 'lamp', 'enabled', 'intensity', 'spread', 'beam', 'aim',
+  'reach', 'softness', 'grain', 'cursorGlow', 'paperIllumination', 'particles', 'texture',
+  'cursorMode', 'coexist'];
+/** 会被本插件改写、卸载时必须逐项还原的 token。 */
+const TOKEN_NAMES = ['--dsw-alias-bg-base', '--dsw-alias-bg-module-platform', '--dsw-alias-bg-layer-1',
+  '--dsw-alias-bg-layer-2', '--dsw-alias-label-primary', '--dsw-alias-label-secondary',
+  '--dsw-alias-label-tertiary', '--dn-paper', '--dn-ink', '--dn-caret-ink', '--dn-light-rgb',
+  '--dn-metal-lo', '--dn-metal-hi', '--dn-metal'];
+let remoteTimer = 0;
 const measure = document.createElement('canvas').getContext('2d');
 
 let teardown = null;
@@ -16,33 +27,80 @@ let teardown = null;
  * 读设置。带版本号：旧版本写进去的键可能已经不认了，所以认不出的值一律回落默认，
  * 而不是让一个脏值把渲染层搞崩。迁移只往前，不回头。
  */
-function readSettings() {
-  try {
-    const raw = localStorage.getItem(STORE_KEY);
-    if (raw) {
-      const saved = JSON.parse(raw);
-      const known = ['paper', 'theme', 'lamp', 'enabled', 'intensity', 'spread', 'beam', 'aim',
-        'reach', 'softness', 'grain', 'cursorGlow', 'paperIllumination', 'particles', 'texture', 'cursorMode'];
-      for (const key of known) {
-        if (saved[key] !== undefined && saved[key] !== null) SETTINGS[key] = saved[key];
-      }
-      if (saved.window && typeof saved.window === 'object') Object.assign(SETTINGS.window, saved.window);
-    }
-  } catch (error) { /* 私密模式或旧数据：用默认值 */ }
+/** 把一份存下来的设置并进来。白名单外的一律不认，脏值也挡在门外。 */
+function mergeSettings(saved) {
+  if (!saved || typeof saved !== 'object') return;
+  for (const key of SETTING_KEYS) {
+    if (saved[key] !== undefined && saved[key] !== null) SETTINGS[key] = saved[key];
+  }
+  if (saved.window && typeof saved.window === 'object') Object.assign(SETTINGS.window, saved.window);
+}
+
+function normalize() {
   if (!PAPERS[SETTINGS.paper]) SETTINGS.paper = 'parchment';
   if (!THEMES[SETTINGS.theme]) SETTINGS.theme = 'paper-and-ink';
   if (['ink', 'quill', 'none'].indexOf(SETTINGS.cursorMode) < 0) SETTINGS.cursorMode = 'ink';
-  SETTINGS.particleCount = SETTINGS.particleCount || 0;
+  if (['auto', 'material', 'full'].indexOf(SETTINGS.coexist) < 0) SETTINGS.coexist = 'auto';
+}
+
+function snapshot() {
+  const saved = {v: STORE_VERSION};
+  for (const key of SETTING_KEYS) saved[key] = SETTINGS[key];
+  saved.window = SETTINGS.window;
+  return saved;
+}
+
+function readSettings() {
+  try {
+    const raw = localStorage.getItem(STORE_KEY);
+    if (raw) mergeSettings(JSON.parse(raw));
+  } catch (error) { /* 私密模式或旧数据：用默认值 */ }
+  normalize();
+}
+
+/**
+ * 桌面版每次启动端口都变，origin 跟着变，localStorage 就空了。
+ * 所以真源在宿主那边（磁盘），本地只当缓存：启动先读磁盘，读不到再用缓存。
+ */
+function loadRemote() {
+  if (typeof fetch !== 'function') return Promise.resolve(false);
+  return fetch(REMOTE_PATH, {headers: {accept: 'application/json'}, credentials: 'same-origin'})
+    .then((response) => (response.ok ? response.json() : null))
+    .then((payload) => {
+      const saved = payload && payload.settings;
+      if (!saved || typeof saved !== 'object') return false;
+      mergeSettings(saved);
+      normalize();
+      persistLocal();
+      return true;
+    })
+    .catch(() => false);
+}
+
+function persistLocal() {
+  try {
+    localStorage.setItem(STORE_KEY, JSON.stringify(snapshot()));
+  } catch (error) { /* 配额或私密模式：不保存也不报错 */ }
+}
+
+function saveRemote() {
+  if (typeof fetch !== 'function') return;
+  clearTimeout(remoteTimer);
+  remoteTimer = setTimeout(() => {
+    try {
+      fetch(REMOTE_PATH, {
+        method: 'PUT',
+        headers: {'content-type': 'application/json'},
+        credentials: 'same-origin',
+        body: JSON.stringify(snapshot())
+      }).catch(() => { /* 宿主半没装或已被卸载：本地缓存已经写过了 */ });
+    } catch (error) { /* ignore */ }
+  }, 700);
 }
 
 function persist() {
-  try {
-    const saved = {v: STORE_VERSION};
-    for (const key of Object.keys(SETTINGS)) {
-      if (typeof SETTINGS[key] !== 'function') saved[key] = SETTINGS[key];
-    }
-    localStorage.setItem(STORE_KEY, JSON.stringify(saved));
-  } catch (error) { /* 配额或私密模式：不保存也不报错 */ }
+  persistLocal();
+  saveRemote();
 }
 
 /** 正在输入的那个光标在哪：回给灯与辉光。 */
@@ -73,10 +131,42 @@ function findCaret() {
  * 纸色要同时落到宿主自己的 token 上，否则换纸只换了画布，界面还停在上一张纸上。
  * 只碰语义别名，不碰任何组件的选择器。
  */
+/**
+ * 探测另一套皮肤在不在场。dsh-claude-style 会定义上百个 --dsh-claude-* 变量
+ * （装机版 139 个），这是它留下的、稳定且不依赖 DOM 结构的指纹。
+ */
+function foreignSkin() {
+  try {
+    const root = getComputedStyle(document.documentElement);
+    if (root.getPropertyValue('--dsh-claude-caret-color').trim() !== '') return 'dsh-claude-style';
+    if (root.getPropertyValue('--dsh-claude-blur-soft').trim() !== '') return 'dsh-claude-style';
+    const body = getComputedStyle(document.body);
+    if (body.getPropertyValue('--dsh-claude-caret-color').trim() !== '') return 'dsh-claude-style';
+  } catch (error) { /* 拿不到计算样式就当作没有 */ }
+  return null;
+}
+
+/** 三种口径：自动（探测到就让位）/ 只叠材质 / 接管配色。 */
+function tokenMode() {
+  if (SETTINGS.coexist === 'full') return 'full';
+  if (SETTINGS.coexist === 'material') return 'material';
+  return foreignSkin() ? 'material' : 'full';
+}
+
 function applyTokens() {
   const p = paper();
   const dark = p.appearance === 'dark';
   const root = document.documentElement.style;
+  // 「只叠材质」：不碰宿主的配色 token，只留纸与灯——这样两套皮肤可以叠着用。
+  if (tokenMode() === 'material') {
+    root.setProperty('--dn-paper', p.paper);
+    root.setProperty('--dn-ink', p.ink);
+    root.setProperty('--dn-caret-ink', p.cursor);
+    root.setProperty('--dn-metal-lo', '#5e431c');
+    root.setProperty('--dn-metal-hi', '#f3dca4');
+    root.setProperty('--dn-metal', '#b8904c');
+    return;
+  }
   root.setProperty('--dsw-alias-bg-base', p.paper);
   root.setProperty('--dsw-alias-bg-module-platform', p.paper);
   root.setProperty('--dsw-alias-bg-layer-1', dark ? '#242028' : '#eadcb9');
@@ -228,7 +318,15 @@ function mount() {
   // 缮写室：与样张同一份 builder，所以两处的面板不会长歪。
   const studio = buildStudio({
     state: () => SETTINGS,
+    foreign: foreignSkin,
+    resolvedCoexist: tokenMode,
     onChange(key, value) {
+      if (key === 'coexist') {
+        SETTINGS.coexist = value;
+        studio.sync();
+        persist();
+        return;
+      }
       if (key === 'paper') {
         SETTINGS.paper = value;
         applyTokens();
@@ -249,8 +347,7 @@ function mount() {
       }
       if (key === 'cursor') {
         SETTINGS.cursorMode = value;
-        caret.mode = value;
-        caret.hide();
+        caret.setMode(value);
         studio.sync();
         persist();
         return;
@@ -269,8 +366,18 @@ function mount() {
   });
   document.body.appendChild(studio.element);
   document.body.appendChild(studio.handle);
-  caret.mode = SETTINGS.cursorMode;
+  caret.setMode(SETTINGS.cursorMode);
   applyTokens();
+
+  // 磁盘上的设置才是真源：取回来之后要重新落到 token、光标与面板上。
+  loadRemote().then((loaded) => {
+    if (!loaded || stopped) return;
+    caret.setMode(SETTINGS.cursorMode);
+    applyTokens();
+    studio.sync();
+    needsBuild = true;
+    reposition();
+  });
 
   window.__dshNocturne = {
     settings: SETTINGS,
@@ -323,12 +430,8 @@ function mount() {
     const style = document.getElementById(STYLE_ID);
     if (style) style.remove();
     // token 还原：撤掉内联覆盖，宿主的主题立刻回来。
-    for (const name of ['--dsw-alias-bg-base', '--dsw-alias-bg-module-platform', '--dsw-alias-bg-layer-1',
-      '--dsw-alias-bg-layer-2', '--dsw-alias-label-primary', '--dsw-alias-label-secondary',
-      '--dsw-alias-label-tertiary', '--dn-paper', '--dn-ink', '--dn-caret-ink', '--dn-light-rgb',
-      '--dn-metal-lo', '--dn-metal-hi', '--dn-metal']) {
-      document.documentElement.style.removeProperty(name);
-    }
+    clearTimeout(remoteTimer);
+    for (const name of TOKEN_NAMES) document.documentElement.style.removeProperty(name);
     delete window.__dshNocturne;
   };
 }

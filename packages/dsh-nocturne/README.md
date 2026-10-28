@@ -41,6 +41,18 @@ __dshNocturne.off()                // 当场卸掉
 
 选择写进 `localStorage`，下次启动沿用。
 
+## 桌面版
+
+桌面版每次启动端口随机，GUI 的 origin 跟着变，`localStorage` 会空。所以这个包带宿主半
+（`lib/index.js`）：设置落盘到 `$DSH_HOME/cache/dsh-nocturne/settings.json`，
+客户端启动时通过 `/dsh-nocturne/settings` 取回来，取不到才用本地缓存。
+宿主半没装（例如只拷了浏览器半）时会静默退回缓存，不会报错。
+
+## 与 dsh-claude-style 共存
+
+默认「自动」：探测到 claude-style 在覆盖同一批 `--dsw-alias-*`，就让位成**只叠材质**——
+保留它的配色与形状，只把纸与灯叠上去。想让它接管配色，缮写室里把「共存」切成「接管配色」。
+
 ## 原理
 
 ```

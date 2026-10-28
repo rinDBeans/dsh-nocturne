@@ -175,6 +175,39 @@ spread 74°、reach 1、softness 0.65、film grain 0.1），与上游官方截�
 
 样张深链：`?studio=1&cursor=quill&caret=继续写什么&caretAt=3`。
 
+## 4.10 · 桌面版与皮肤共存
+
+### 为什么需要宿主半
+
+DSH 桌面版每次启动把 web 服务端口设成 0（随机端口），GUI 的 origin 随之变化。
+浏览器 `localStorage` 按 origin 隔离——不落盘的话，**用户每重启一次皮肤就回到默认**。
+
+宿主半因此存在，只做一件事：`/dsh-nocturne/settings` 上读写一个 JSON 文档，
+路径 `$DSH_HOME/cache/dsh-nocturne/settings.json`，临时文件 + `rename` 原子替换，
+只接受回环地址。写法照装机里的 `dsh-claude-style`（`ctx.inject(["webServer"], …)` +
+`scope.effect` + `server.register({kind: "prefix", path, handler})`），
+因为那是在这台机器上唯一被验证过的写法。
+
+客户端是「磁盘真源 + 本地缓存」：启动 GET → 合并 → 覆盖缓存；改动 700ms 防抖 PUT。
+宿主半没装时 fetch 失败，静默退回缓存，样张与纯 web 版照常工作。
+
+### 与 dsh-claude-style 共存
+
+它用 371 处 `!important` 覆盖同一批 `--dsw-alias-*`，同时又定义了 139 个 `--dsh-claude-*`
+自定义属性——后者是**稳定且不依赖 DOM 结构**的指纹，据此探测它在不在场。
+
+| 口径 | 行为 |
+| --- | --- |
+| 自动（默认） | 探测到就"只叠材质"，否则"接管配色" |
+| 只叠材质 | 不写任何 `--dsw-alias-*`，只画纸与灯——两套皮肤叠着用 |
+| 接管配色 | 内联 `!important`；内联 important 高于它样式表里的 important，所以本皮肤赢 |
+
+![桌面版共存（桩测试：冒充宿主持久化 + 冒充 claude-style 在场）](previews/dsh-desktop-coexist.png)
+
+上图是桩测试的实际输出：磁盘设置取回了 `night / midnight-study / quill`，
+检测到 claude-style → 自动让位 → `--dsw-alias-bg-base` 保持空（未接管）、
+`--dn-paper` 是夜纸、羽毛笔 `display:block`、提示文案正确。
+
 ## 5 · 交付物
 
 | 路径 | 是什么 |
