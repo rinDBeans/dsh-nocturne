@@ -45,6 +45,8 @@ const sharedCss = sharedMatch[1]
   .replaceAll('var(--gilt)', 'var(--dn-metal, #b8904c)');
 
 const cssLiteral = 'const CSS_TEXT = ' + JSON.stringify(css + '\n' + caretCss + '\n' + sharedCss) + ';';
+// 版本号从 package.json 注入：自检里带上它，才能确认宿主跑的是哪一版。
+const version = JSON.parse(readFileSync(join(here, '..', 'package.json'), 'utf8')).version;
 
 const lines = [];
 lines.push('/**');
@@ -66,6 +68,8 @@ lines.push('');
 lines.push(core);
 lines.push('');
 lines.push(cssLiteral);
+lines.push('');
+lines.push('const DN_VERSION = ' + JSON.stringify(version) + ';');
 lines.push('');
 lines.push(adapter);
 lines.push('');

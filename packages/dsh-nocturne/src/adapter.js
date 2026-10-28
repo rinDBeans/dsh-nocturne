@@ -34,6 +34,8 @@ let remoteTimer = 0;
 let lastDiag = null;
 /** 卡顿记录：只留最后 12 条，随设置文档一起落盘，用来在拿不到界面时定位卡死。 */
 const hangs = [];
+/** 帧里的第一个异常。桌面版没有控制台，所以它必须跟着设置落盘。 */
+let selfCheckError = '';
 const measure = document.createElement('canvas').getContext('2d');
 
 let teardown = null;
@@ -74,6 +76,7 @@ function snapshot() {
   // 键名带下划线，mergeSettings 的白名单不会把它吃回设置。
   if (lastDiag) saved.__diag = lastDiag;
   if (hangs.length) saved.__hangs = hangs.slice();
+  if (selfCheckError) saved.__error = selfCheckError;
   return saved;
 }
 
@@ -178,6 +181,72 @@ function tokenMode() {
   if (SETTINGS.coexist === 'full') return 'full';
   if (SETTINGS.coexist === 'material') return 'material';
   return foreignSkin() ? 'material' : 'full';
+}
+
+/**
+ * 白面探针：发送消息那一刻如果冒出一个近白的表面（气泡、卡片），把它记下来。
+ * 记的是"它是谁、谁上的色、有没有被提成合成层"，随设置一起落盘——
+ * 桌面版拿不到控制台，只能让客户端自己取证。
+ */
+function watchWhite() {
+  const hits = [];
+  let total = 0;
+  let budget = 0;
+  let windowStart = 0;
+  const near = (value) => {
+    const match = /^rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*([\d.]+))?\)$/.exec(value);
+    if (!match) return false;
+    if (match[4] !== undefined && Number(match[4]) < 0.6) return false;
+    return Number(match[1]) > 228 && Number(match[2]) > 226 && Number(match[3]) > 224;
+  };
+  const label = (node) => {
+    if (!node || node.nodeType !== 1) return '';
+    const cls = String(node.className || '').split(' ').filter(Boolean).slice(0, 2).join('.');
+    return node.tagName.toLowerCase() + (cls ? '.' + cls : '');
+  };
+  const record = (node) => {
+    // 整场最多记 40 次，只留最近 12 条：流式输出时新节点很多，不能无限记账。
+    if (node.nodeType !== 1 || total >= 40) return;
+    const style = getComputedStyle(node);
+    if (!near(style.backgroundColor)) return;
+    // 不按尺寸筛：入场动画第一帧常常是 scale(0)，那一帧的盒子就是 0×0，
+    // 而"闪白"恰恰发生在那一帧——按尺寸筛会把最该抓的那一次筛掉。
+    const box = node.getBoundingClientRect();
+    hits.push({
+      at: new Date().toISOString().slice(11, 23),
+      el: label(node),
+      parent: label(node.parentElement),
+      grand: label(node.parentElement && node.parentElement.parentElement),
+      bg: style.backgroundColor,
+      radius: style.borderRadius,
+      z: style.zIndex,
+      transform: style.transform.slice(0, 20),
+      willChange: style.willChange,
+      anim: style.animationName.slice(0, 24),
+      box: [Math.round(box.width), Math.round(box.height)]
+    });
+    total += 1;
+    if (hits.length >= 12) hits.shift();
+    if (lastDiag) lastDiag.white = hits.slice();
+    persist();
+  };
+  const scan = (node) => {
+    if (!node || node.nodeType !== 1) return;
+    const now = performance.now();
+    if (now - windowStart > 1000) { windowStart = now; budget = 0; }
+    record(node);
+    for (const child of node.children) {
+      if (++budget > 60) return;
+      record(child);
+    }
+  };
+  const observer = new MutationObserver((records) => {
+    for (const mutation of records) {
+      for (const node of mutation.addedNodes) scan(node);
+    }
+  });
+  if (document.body) observer.observe(document.body, {childList: true, subtree: true});
+  return {observer: observer, hits: hits};
 }
 
 /**
@@ -295,6 +364,8 @@ function mount() {
   const scrollClip = new ScrollClip();
   scrollClip.mount({zIndex: 2147482003});
 
+  const white = watchWhite();
+
   const paperLight = new PaperLight(paperCanvas);
   const glow = new GlowLayer(glowCanvas);
 
@@ -335,8 +406,7 @@ function mount() {
   let lastCaretPoint = null;
   let cursorMovedThisFrame = false;
 
-  function frame(now) {
-    if (stopped) return;
+  function paintFrame(now) {
     const startedAt = performance.now();
     const time = now / 1000;
     const appearance = paper().appearance;
@@ -418,6 +488,23 @@ function mount() {
     }
     lastFrameAt = now;
     rebuiltThisFrame = false;
+  }
+
+  /**
+   * 一帧的壳：里面出任何异常都不许把循环掐断。
+   * 之前 reportDiag 里一处抛错就把整个循环带走（纸停在最后一帧、自检也再没写过），
+   * 桌面版又没有控制台，所以这里把错误存进 selfCheckError，随自检落盘。
+   */
+  function frame(now) {
+    if (stopped) return;
+    try {
+      paintFrame(now);
+    } catch (error) {
+      if (!selfCheckError) {
+        selfCheckError = String((error && error.stack) || error).slice(0, 240);
+        if (lastDiag) { lastDiag.error = selfCheckError; persist(); }
+      }
+    }
     frameId = requestAnimationFrame(frame);
   }
 
@@ -504,6 +591,15 @@ function mount() {
     const rect = paperCanvas.getBoundingClientRect();
     lastDiag = {
       at: new Date().toISOString(),
+      version: DN_VERSION,
+      white: white.hits.slice(),
+      surfaces: (function () {
+        const body = document.body;
+        return body ? [
+          getComputedStyle(body).getPropertyValue('--dsw-specific-bubble').trim(),
+          getComputedStyle(body).getPropertyValue('--dsw-specific-input-major').trim()
+        ] : null;
+      })(),
       origin: location.origin,
       dpr: window.devicePixelRatio,
       viewport: [window.innerWidth, window.innerHeight],
@@ -666,6 +762,19 @@ function mount() {
         target: scrollClip.target ? String(scrollClip.target.className).slice(0, 40) : null
       };
     },
+    /** 马上写一次自检（含白面探针的结果）——桌面版没有控制台，这是唯一的取证入口。 */
+    diag() {
+      try {
+        reportDiag();
+      } catch (error) {
+        return {error: String(error).slice(0, 200)};
+      }
+      return lastDiag;
+    },
+    /** 这次会话里抓到的近白表面。 */
+    white() {
+      return white.hits.slice();
+    },
     /** 纸上有什么在滚动：查不到滚动容器时用它诊断。 */
     where() {
       return scrollClip.target ? {
@@ -695,6 +804,7 @@ function mount() {
     document.removeEventListener('visibilitychange', onVisibility);
     paperCanvas.removeEventListener('webglcontextlost', onContextLost);
     paperCanvas.removeEventListener('webglcontextrestored', onContextRestored);
+    white.observer.disconnect();
     caret.destroy();
     scrollClip.destroy();
     paperLight.release();
