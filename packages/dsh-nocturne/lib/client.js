@@ -4,8 +4,8 @@
  * 纸、灯、辉光三层的渲染代码由 tools/build.mjs 从 sample/nocturne-desk.html 抽取；
  * 上游配方来自 Chaosnap/Typewriter-Nocturne（MIT），随包保留其版权行。
  *
- *   核心 1335 行 · 适配 573 行 · 样式 70 行
- *   样张 sample/nocturne-desk.html（95334 bytes）
+ *   核心 1356 行 · 适配 628 行 · 样式 70 行
+ *   样张 sample/nocturne-desk.html（95918 bytes）
  */
 window.__ModuleLoader__.load({
   id: 'dsh-nocturne',
@@ -714,21 +714,25 @@ const SPREAD = [
 const FRESH = [{transform: 'scale(1.12)'}, {transform: 'scale(1)'}];
 const FRESH_HALO = [{opacity: 0.35, transform: 'scale(1.3)'}, {opacity: 0, transform: 'scale(1)'}];
 
-/** 光标下的那个字。真空格、行尾、块边界都回空串，宁可只画墨块也不画错字。 */
-function glyphAfter(node, offset) {
-  if (!node) return {char: '', bold: false, italic: false};
-  if (node.nodeType === 3) {
-    if (offset < node.data.length) return {char: node.data[offset], bold: false, italic: false};
-    node = node.nextSibling;
-    offset = 0;
+/**
+ * 光标下的那个字。
+ *
+ * 早先用 firstChild / nextSibling / parentNode 手工爬树，输入框删到空的时候锚点会变成
+ * 编辑器元素本身，那套逻辑就爬出了编辑器、开始遍历整页——单帧卡 1.1 秒，界面直接假死。
+ * 现在只做一件事：把"光标到编辑器末尾"这段文本取出来读第一个字。原地完成，永远出不去。
+ */
+function glyphAfter(editor, range) {
+  try {
+    if (!editor || !range || !editor.contains(range.startContainer)) return '';
+    if (!editor.textContent) return '';
+    const rest = document.createRange();
+    rest.setStart(range.startContainer, range.startOffset);
+    rest.setEnd(editor, editor.childNodes.length);
+    const text = rest.toString();
+    return text ? text.charAt(0) : '';
+  } catch (error) {
+    return '';
   }
-  while (node) {
-    if (node.nodeType === 3 && node.data.length) return {char: node.data[0], bold: false, italic: false};
-    if (node.nodeName === 'BR') return {char: '', bold: false, italic: false};
-    node = node.firstChild || node.nextSibling;
-    while (node && !node.firstChild && !node.nextSibling) node = node.parentNode;
-  }
-  return {char: '', bold: false, italic: false};
 }
 
 /** 一个字的自然宽度：中日韩约 1em，拉丁约半 em。墨块按它取宽，字才不会挤出格子。 */
@@ -882,6 +886,14 @@ class InkCaret {
   }
 
   measure(editor) {
+    try {
+      return this.measureInner(editor);
+    } catch (error) {
+      return null;
+    }
+  }
+
+  measureInner(editor) {
     const style = getComputedStyle(editor);
     const fontSize = parseFloat(style.fontSize) || 16;
     if (editor.tagName === 'INPUT' || editor.tagName === 'TEXTAREA') {
@@ -919,7 +931,7 @@ class InkCaret {
     const anchorStyle = anchor ? getComputedStyle(anchor) : style;
     const anchorSize = parseFloat(anchorStyle.fontSize) || fontSize;
     measureCanvas.font = anchorStyle.fontStyle + ' ' + anchorStyle.fontWeight + ' ' + anchorSize + 'px ' + anchorStyle.fontFamily;
-    const char = glyphAfter(range.startContainer, range.startOffset).char;
+    const char = glyphAfter(editor, range);
     return {
       x: rect.left,
       y: rect.top,
@@ -933,6 +945,15 @@ class InkCaret {
 
   /** 每帧调一次：位置、字、焦点。量不出来就老实藏起来，交给原生光标。 */
   sync() {
+    try {
+      return this.syncInner();
+    } catch (error) {
+      this.hide();
+      return null;
+    }
+  }
+
+  syncInner() {
     if (!this.enabled) { this.hide(); return null; }
     const editor = activeEditor();
     if (!editor) { this.hide(); return null; }
@@ -1374,6 +1395,8 @@ const TOKEN_NAMES = ['--dsw-alias-bg-base', '--dsw-alias-bg-module-platform', '-
   '--dn-metal-lo', '--dn-metal-hi', '--dn-metal', '--dn-sheet'];
 let remoteTimer = 0;
 let lastDiag = null;
+/** 卡顿记录：只留最后 12 条，随设置文档一起落盘，用来在拿不到界面时定位卡死。 */
+const hangs = [];
 const measure = document.createElement('canvas').getContext('2d');
 
 let teardown = null;
@@ -1405,6 +1428,7 @@ function snapshot() {
   // 自检记录：桌面版每次启动端口都变，我拿不到界面，只能让客户端自己报一次状态。
   // 键名带下划线，mergeSettings 的白名单不会把它吃回设置。
   if (lastDiag) saved.__diag = lastDiag;
+  if (hangs.length) saved.__hangs = hangs.slice();
   return saved;
 }
 
@@ -1625,11 +1649,20 @@ function mount() {
       paperLight.build({width, height, pixelRatio: dpr, p: paper()});
       needsBuild = false;
       needsLight = true;
+      rebuiltThisFrame = true;
     }
   }
 
+  let lastFrameAt = 0;
+  let lastGlowAt = 0;
+  let lastRgbWritten = '';
+  let rebuiltThisFrame = false;
+  let lastCaretPoint = null;
+  let cursorMovedThisFrame = false;
+
   function frame(now) {
     if (stopped) return;
+    const startedAt = performance.now();
     const time = now / 1000;
     const appearance = paper().appearance;
     // 光标位置交给墨迹光标自己量（contenteditable / input / textarea 都能跟），
@@ -1639,10 +1672,12 @@ function mount() {
     const rig = buildRig(size, caretSheetX);
     const animateGrain = SETTINGS.grain > 0 && !reduceMotion;
 
-    if (needsLight || (animateGrain && now - lastLightAt > 90)) {
+    let lightFrameRan = false;
+    if (needsLight || (animateGrain && now - lastLightAt > 120)) {
       paperLight.render(rig, paper(), animateGrain ? time : 0);
       needsLight = false;
       lastLightAt = now;
+      lightFrameRan = true;
       if (diagPending) {
         diagPending = false;
         reportDiag();
@@ -1651,19 +1686,60 @@ function mount() {
 
     const lightChannels = toUnit(theme().light.color).map((c) => Math.round(c * 255));
     const poolChannels = poolColor(appearance);
-    glow.render({
-      rig,
-      lamp: SETTINGS.lamp && SETTINGS.enabled,
-      rgb: lightChannels.join(', '),
-      poolRgb: poolChannels.join(', '),
-      appearance,
-      intensity: SETTINGS.intensity,
-      particles: SETTINGS.particles,
-      cursorGlow: SETTINGS.cursorGlow,
-      cursor: caretPoint ? {x: caretPoint.x - origin.left, y: caretPoint.y - origin.top} : null,
-      time
-    });
-    document.documentElement.style.setProperty('--dn-light-rgb', lightChannels.join(' '));
+
+    // 辉光层是 "screen" 混合：每重画一次，浏览器就要把整块背景重新合成一遍。
+    // 长会话里 DOM 上万节点，每帧重画是秒级代价——所以只在真会变的时候画：
+    // 灯变了、光标动了/出现了、或者开了尘埃（那才需要动画）。
+    const caretMoved = caretPoint && lastCaretPoint &&
+      (Math.abs(caretPoint.x - lastCaretPoint.x) > 0.5 || Math.abs(caretPoint.y - lastCaretPoint.y) > 0.5);
+    const caretAppeared = Boolean(caretPoint) !== Boolean(lastCaretPoint);
+    const dustDue = SETTINGS.particles > 0 && now - lastGlowAt > 60;
+    if (lightFrameRan || caretMoved || caretAppeared || dustDue) {
+      glow.render({
+        rig,
+        lamp: SETTINGS.lamp && SETTINGS.enabled,
+        rgb: lightChannels.join(', '),
+        poolRgb: poolChannels.join(', '),
+        appearance,
+        intensity: SETTINGS.intensity,
+        particles: SETTINGS.particles,
+        cursorGlow: SETTINGS.cursorGlow,
+        cursor: caretPoint ? {x: caretPoint.x - origin.left, y: caretPoint.y - origin.top} : null,
+        time
+      });
+      lastGlowAt = now;
+    }
+    lastCaretPoint = caretPoint ? {x: caretPoint.x, y: caretPoint.y} : null;
+    cursorMovedThisFrame = false;
+
+    // 根元素的 custom property 一改，整篇文档的样式都要重算——只在真的变了才写。
+    const rgb = lightChannels.join(' ');
+    if (rgb !== lastRgbWritten) {
+      document.documentElement.style.setProperty('--dn-light-rgb', rgb);
+      lastRgbWritten = rgb;
+    }
+
+    // 卡顿看门狗：帧间隔超 200ms 就记一笔，连同本帧自己的耗时，用来分清
+    // "卡在我们自己的回调里"还是"卡在别处"。
+    const cost = performance.now() - startedAt;
+    if (lastFrameAt) {
+      const gap = now - lastFrameAt;
+      if (gap > 200) {
+        hangs.push({
+          at: new Date().toISOString().slice(11, 23),
+          gap: Math.round(gap),
+          cost: Math.round(cost),
+          nodes: document.getElementsByTagName('*').length,
+          rebuilt: rebuiltThisFrame,
+          editorEmpty: caretPoint ? false : true,
+          canvases: document.querySelectorAll('canvas[' + PAPER_ATTR + ']').length
+        });
+        if (hangs.length > 12) hangs.shift();
+        persist();
+      }
+    }
+    lastFrameAt = now;
+    rebuiltThisFrame = false;
     frameId = requestAnimationFrame(frame);
   }
 

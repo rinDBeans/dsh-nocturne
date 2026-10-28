@@ -1302,21 +1302,25 @@ const SPREAD = [
 const FRESH = [{transform: 'scale(1.12)'}, {transform: 'scale(1)'}];
 const FRESH_HALO = [{opacity: 0.35, transform: 'scale(1.3)'}, {opacity: 0, transform: 'scale(1)'}];
 
-/** 光标下的那个字。真空格、行尾、块边界都回空串，宁可只画墨块也不画错字。 */
-function glyphAfter(node, offset) {
-  if (!node) return {char: '', bold: false, italic: false};
-  if (node.nodeType === 3) {
-    if (offset < node.data.length) return {char: node.data[offset], bold: false, italic: false};
-    node = node.nextSibling;
-    offset = 0;
+/**
+ * 光标下的那个字。
+ *
+ * 早先用 firstChild / nextSibling / parentNode 手工爬树，输入框删到空的时候锚点会变成
+ * 编辑器元素本身，那套逻辑就爬出了编辑器、开始遍历整页——单帧卡 1.1 秒，界面直接假死。
+ * 现在只做一件事：把"光标到编辑器末尾"这段文本取出来读第一个字。原地完成，永远出不去。
+ */
+function glyphAfter(editor, range) {
+  try {
+    if (!editor || !range || !editor.contains(range.startContainer)) return '';
+    if (!editor.textContent) return '';
+    const rest = document.createRange();
+    rest.setStart(range.startContainer, range.startOffset);
+    rest.setEnd(editor, editor.childNodes.length);
+    const text = rest.toString();
+    return text ? text.charAt(0) : '';
+  } catch (error) {
+    return '';
   }
-  while (node) {
-    if (node.nodeType === 3 && node.data.length) return {char: node.data[0], bold: false, italic: false};
-    if (node.nodeName === 'BR') return {char: '', bold: false, italic: false};
-    node = node.firstChild || node.nextSibling;
-    while (node && !node.firstChild && !node.nextSibling) node = node.parentNode;
-  }
-  return {char: '', bold: false, italic: false};
 }
 
 /** 一个字的自然宽度：中日韩约 1em，拉丁约半 em。墨块按它取宽，字才不会挤出格子。 */
@@ -1470,6 +1474,14 @@ class InkCaret {
   }
 
   measure(editor) {
+    try {
+      return this.measureInner(editor);
+    } catch (error) {
+      return null;
+    }
+  }
+
+  measureInner(editor) {
     const style = getComputedStyle(editor);
     const fontSize = parseFloat(style.fontSize) || 16;
     if (editor.tagName === 'INPUT' || editor.tagName === 'TEXTAREA') {
@@ -1507,7 +1519,7 @@ class InkCaret {
     const anchorStyle = anchor ? getComputedStyle(anchor) : style;
     const anchorSize = parseFloat(anchorStyle.fontSize) || fontSize;
     measureCanvas.font = anchorStyle.fontStyle + ' ' + anchorStyle.fontWeight + ' ' + anchorSize + 'px ' + anchorStyle.fontFamily;
-    const char = glyphAfter(range.startContainer, range.startOffset).char;
+    const char = glyphAfter(editor, range);
     return {
       x: rect.left,
       y: rect.top,
@@ -1521,6 +1533,15 @@ class InkCaret {
 
   /** 每帧调一次：位置、字、焦点。量不出来就老实藏起来，交给原生光标。 */
   sync() {
+    try {
+      return this.syncInner();
+    } catch (error) {
+      this.hide();
+      return null;
+    }
+  }
+
+  syncInner() {
     if (!this.enabled) { this.hide(); return null; }
     const editor = activeEditor();
     if (!editor) { this.hide(); return null; }
@@ -2015,6 +2036,16 @@ function syncRoomLight(point) {
 }
 
 function frame(now) {
+  // 渲染循环是这条皮肤的命：任何异常都不许把它掐断，否则纸会停在最后一帧。
+  try {
+    paintFrame(now);
+  } catch (error) {
+    if (!frame.__warned) { frame.__warned = true; console.warn('nocturne frame skipped:', error); }
+  }
+  requestAnimationFrame(frame);
+}
+
+function paintFrame(now) {
   const time = now / 1000;
   const appearance = paper().appearance;
   const point = inkCaret.sync();
@@ -2049,7 +2080,6 @@ function frame(now) {
   });
 
   rootStyle.setProperty('--light-rgb', lightChannels.join(' '));
-  requestAnimationFrame(frame);
 }
 
 /** 换纸：纸色、墨色、描边、强调色一起换。 */
