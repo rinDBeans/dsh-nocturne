@@ -500,9 +500,11 @@ html[data-dn-sel="classic"]::-moz-selection{ background:var(--wash); color:inher
   position:absolute; display:block; white-space:pre; overflow:visible;
   transform-origin:50% 50%;
 }
-/* 盖纸：先把这一格的字压住，末段再让开。 */
+/* 盖纸：先把这一格的字压住，末段再让开。
+   四周要出血 1–2px：字母的墨会溢出它的字宽盒子，恰好不外扩就会在格边留下
+   一道原字的竖缝，远看像"重影"。上游按格子画、格子比字宽，所以没这个问题。 */
 .dn-sel-cover{
-  position:absolute; inset:0;
+  position:absolute; inset:-1px -2px;
   background:var(--sel-paper);
   opacity:0;
   animation:dn-sel-cover 680ms ease-in-out both;
@@ -521,6 +523,8 @@ html[data-dn-sel="classic"]::-moz-selection{ background:var(--wash); color:inher
   box-shadow:7px 2px 0 currentColor, -5px 6px 0 currentColor, 2px -7px 0 currentColor;
   opacity:0;
   animation:dn-sel-speck 680ms ease-in-out both;
+  /* 三点墨跟着本字的错峰走：animation 不自继承，但伪元素可以从宿主元素继承这个值。 */
+  animation-delay:inherit;
 }
 @keyframes dn-sel-cover{ 0%{opacity:0} 30%{opacity:1} 70%{opacity:1} 100%{opacity:0} }
 @keyframes dn-sel-ink{
@@ -2206,6 +2210,8 @@ class SelectionInk {
     this.cells = [];
     this.washKey = 'off';
     this.timers = [];
+    /** 同一格只留一个：两次选区变化落在同一格时，旧的要先撤掉，否则会重复叠字。 */
+    this.byCell = new Map();
     this.range = typeof Range === 'function' ? document.createRange() : null;
   }
 
@@ -2262,6 +2268,7 @@ class SelectionInk {
     this.inkEls = [];
     this.cells = [];
     this.wash = [];
+    if (this.byCell) this.byCell.clear();
     this.live = false;
     this.prev = null;
     this.washKey = 'off';
@@ -2393,8 +2400,11 @@ class SelectionInk {
         const hidden = computed.visibility === 'hidden' || computed.display === 'none'
           || Number(computed.opacity) === 0;
         look = hidden ? null : {
-          font: computed.fontStyle + ' ' + computed.fontWeight + ' '
-            + computed.fontSize + ' ' + computed.fontFamily,
+          style: computed.fontStyle,
+          weight: computed.fontWeight,
+          size: computed.fontSize,
+          family: computed.fontFamily,
+          spacing: computed.letterSpacing,
           color: computed.color
         };
         looks.set(holder, look);
@@ -2415,10 +2425,16 @@ class SelectionInk {
         el.style.top = rect.top + 'px';
         el.style.width = rect.width + 'px';
         el.style.height = rect.height + 'px';
-        el.style.font = look.font;
+        el.style.fontFamily = look.family;
+        el.style.fontSize = look.size;
+        el.style.fontWeight = look.weight;
+        el.style.fontStyle = look.style;
+        // letter-spacing 是排版的一部分：少抄一格，后面每个字都会往下漂。
+        if (look.spacing && look.spacing !== 'normal') el.style.letterSpacing = look.spacing;
         el.style.lineHeight = rect.height + 'px';
         el.style.color = look.color;
         el.style.animationDelay = delay;
+        el.dataset.cell = Math.round(rect.left) + ':' + Math.round(rect.top);
         const cover = document.createElement('i');
         cover.className = 'dn-sel-cover';
         cover.style.animationDelay = delay;
@@ -2427,8 +2443,17 @@ class SelectionInk {
         ink.style.animationDelay = delay;
         ink.textContent = char;
         el.append(cover, ink);
+        // 这一格上一轮已经画过就先撤掉：重复的 span 会让字叠两层，
+        // 而且新盖纸会盖掉旧墨，看起来像缺字。
+        const key = Math.round(rect.left) + ':' + Math.round(rect.top);
+        const previous = this.byCell.get(key);
+        if (previous) {
+          previous.remove();
+          this.inkEls = this.inkEls.filter((item) => item.el !== previous);
+        }
         this.layer.appendChild(el);
         this.inkEls.push({el: el});
+        this.byCell.set(key, el);
         made.push(el);
         count += 1;
       }
@@ -2441,7 +2466,11 @@ class SelectionInk {
   schedule(made) {
     const life = SELECT_DISSOLVE_MS + SELECT_MAX_STAGGER_MS + 120;
     const timer = setTimeout(() => {
-      for (const el of made) el.remove();
+      for (const el of made) {
+        el.remove();
+        const key = el.dataset.cell;
+        if (key && this.byCell.get(key) === el) this.byCell.delete(key);
+      }
       this.inkEls = this.inkEls.filter((item) => made.indexOf(item.el) < 0);
       this.cells = this.inkEls.map((item) => item.el);
       this.timers = this.timers.filter((id) => id !== timer);
