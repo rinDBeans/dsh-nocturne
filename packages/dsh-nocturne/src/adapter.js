@@ -19,6 +19,7 @@ const TOKEN_NAMES = ['--dsw-alias-bg-base', '--dsw-alias-bg-module-platform', '-
   '--dsw-alias-label-tertiary', '--dn-paper', '--dn-ink', '--dn-caret-ink', '--dn-light-rgb',
   '--dn-metal-lo', '--dn-metal-hi', '--dn-metal'];
 let remoteTimer = 0;
+let lastDiag = null;
 const measure = document.createElement('canvas').getContext('2d');
 
 let teardown = null;
@@ -47,6 +48,9 @@ function snapshot() {
   const saved = {v: STORE_VERSION};
   for (const key of SETTING_KEYS) saved[key] = SETTINGS[key];
   saved.window = SETTINGS.window;
+  // 自检记录：桌面版每次启动端口都变，我拿不到界面，只能让客户端自己报一次状态。
+  // 键名带下划线，mergeSettings 的白名单不会把它吃回设置。
+  if (lastDiag) saved.__diag = lastDiag;
   return saved;
 }
 
@@ -314,6 +318,39 @@ function mount() {
 
   measureSheet();
   frameId = requestAnimationFrame(frame);
+
+  // 跑起来 2 秒后报一次自检：WebGL 起没起来、纸画出来没有、token 实际是什么。
+  setTimeout(() => {
+    if (stopped) return;
+    let renderer = '';
+    let webgl2 = false;
+    try {
+      const gl = paperCanvas.getContext('webgl2');
+      webgl2 = Boolean(gl);
+      const info = gl && gl.getExtension('WEBGL_debug_renderer_info');
+      if (gl && info) renderer = String(gl.getParameter(info.UNMASKED_RENDERER_WEBGL)).slice(0, 60);
+    } catch (error) { /* 拿不到就留空 */ }
+    const rect = paperCanvas.getBoundingClientRect();
+    lastDiag = {
+      at: new Date().toISOString(),
+      origin: location.origin,
+      dpr: window.devicePixelRatio,
+      viewport: [window.innerWidth, window.innerHeight],
+      canvas: [paperCanvas.width, paperCanvas.height, Math.round(rect.width), Math.round(rect.height)],
+      webgl2: webgl2,
+      paperState: paperLight.state,
+      renderer: renderer,
+      tokenMode: tokenMode(),
+      foreign: foreignSkin(),
+      bgBase: getComputedStyle(document.documentElement).getPropertyValue('--dsw-alias-bg-base').trim(),
+      dnPaper: getComputedStyle(document.documentElement).getPropertyValue('--dn-paper').trim(),
+      canvases: document.querySelectorAll('canvas[' + PAPER_ATTR + ']').length,
+      caret: caret.shown ? caret.mode : 'hidden',
+      papers: Object.keys(PAPERS).length,
+      themes: Object.keys(THEMES).length
+    };
+    persist();
+  }, 2000);
 
   // 缮写室：与样张同一份 builder，所以两处的面板不会长歪。
   const studio = buildStudio({
