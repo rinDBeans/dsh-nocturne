@@ -17,7 +17,7 @@ const SETTING_KEYS = ['paper', 'theme', 'lamp', 'enabled', 'intensity', 'spread'
 const TOKEN_NAMES = ['--dsw-alias-bg-base', '--dsw-alias-bg-module-platform', '--dsw-alias-bg-layer-1',
   '--dsw-alias-bg-layer-2', '--dsw-alias-label-primary', '--dsw-alias-label-secondary',
   '--dsw-alias-label-tertiary', '--dn-paper', '--dn-ink', '--dn-caret-ink', '--dn-light-rgb',
-  '--dn-metal-lo', '--dn-metal-hi', '--dn-metal', '--dn-sheet'];
+  '--dn-metal-lo', '--dn-metal-hi', '--dn-metal', '--dn-sheet', '--dn-selection'];
 let remoteTimer = 0;
 let lastDiag = null;
 /** 卡顿记录：只留最后 12 条，随设置文档一起落盘，用来在拿不到界面时定位卡死。 */
@@ -194,6 +194,8 @@ function tokenMap(p) {
     '--dn-metal': '#b8904c',
     // 纸的底色：整窗背景挂在它上面，卸载/让位时一并还原
     '--dn-sheet': p.paper,
+    // 选区底色：纸自己的调子（浅色纸取描金，深色纸取月白）
+    '--dn-selection': washColor(),
 
   };
 }
@@ -209,6 +211,7 @@ function applyTokens() {
     const p = paper();
     const root = document.documentElement.style;
     root.setProperty('--dn-sheet', 'transparent');
+    root.setProperty('--dn-selection', washColor());
     for (const name of ['--dn-paper', '--dn-ink', '--dn-caret-ink', '--dn-metal-lo', '--dn-metal-hi', '--dn-metal']) {
       root.setProperty(name, {
         '--dn-paper': p.paper,
@@ -537,6 +540,8 @@ function mount() {
       }
       if (key === 'theme') {
         SETTINGS.theme = value;
+        // 选区底色取自房间，换房要重写一遍 token。
+        applyTokens();
         needsBuild = true;
         studio.sync();
         persist();

@@ -29,6 +29,8 @@
   --border-strong:rgba(42,32,25,.30);
   --cursor:#3a2c20;
   --selection:rgba(52,64,112,.20);
+  /* 选区的底色：纸自己的调子。JS 起来后会按纸/房间重算。 */
+  --dn-selection:rgba(176,138,74,.28);
   --light-rgb:255 210 154;
   --vignette:.42;
   --dn-metal-lo:#5e431c;
@@ -477,6 +479,12 @@ tr:last-child td{border-bottom:0}
 /*<<< caret-css */
 
 /*>>> shared-css */
+/* ── 选区：纸自己的颜色 ────────────────────────────────────────────────
+   不是系统那种蓝，也压不住系统的行为——只换背景色，拖动、复制、双击选词全归浏览器。
+   不加 !important：宿主若另有口径，让它赢。 */
+::selection{ background:var(--dn-selection, rgba(176,138,74,.28)); color:inherit }
+::-moz-selection{ background:var(--dn-selection, rgba(176,138,74,.28)); color:inherit }
+
 /* ── 纸夹：一枚 Gem 夹夹在纸的右缘 ────────────────────────────────────
    外圈在纸前，内舌在纸后（只留下压住纸面的一道痕），弯头探出纸外。
    金属丝按"上左受光"的管状上色：暗边 + 本体 + 沿光侧的高光。 */
@@ -729,6 +737,17 @@ const SETTINGS = {
 };
 const theme = () => THEMES[SETTINGS.theme];
 const paper = () => PAPERS[SETTINGS.paper];
+
+/**
+ * 选区的底色：纸自己的调子，不是浏览器的蓝。
+ * 浅色纸用房间的描金（与细边、页码同源），深色纸用纸自带的月白。
+ * 上游的规则是"主题选色优先、纸选色兜底"；这里的纸与房间是正交的，所以按纸的明暗分流。
+ */
+function washColor() {
+  const p = paper();
+  const t = theme();
+  return p.appearance === 'dark' ? p.selection : (t.selection || p.selection);
+}
 
 /**
  * 标定值：这一组是亮度分布对到上游官方截图（p50≈115 / p95≈178）的那一套。
@@ -2512,6 +2531,12 @@ const scrollClip = new ScrollClip();
 scrollClip.mount({zIndex: 6, preferred: '.scroll'});
 
 
+/** 选区底色跟着纸与房间走。 */
+function setWash() {
+  rootStyle.setProperty('--dn-selection', washColor());
+}
+setWash();
+
 function relayout() {
   const dpr = Math.min(2, window.devicePixelRatio || 1);
   const rect = sheetEl.getBoundingClientRect();
@@ -2600,6 +2625,7 @@ function applyPaper(id) {
   rootStyle.setProperty('--ink-faint', p.inkMuted);
   rootStyle.setProperty('--cursor', p.cursor);
   rootStyle.setProperty('--selection', p.selection);
+  setWash();
   const dark = p.appearance === 'dark';
   rootStyle.setProperty('--border', dark ? 'rgba(230,225,234,.16)' : 'rgba(42,32,25,.16)');
   rootStyle.setProperty('--border-strong', dark ? 'rgba(230,225,234,.30)' : 'rgba(42,32,25,.30)');
@@ -2634,6 +2660,7 @@ function applyTheme(id) {
   rootStyle.setProperty('--gilt-soft', t.palette.accentSoft);
   rootStyle.setProperty('--gilt-text', t.appearance === 'dark' ? '#e3c48a' : '#6f5420');
   rootStyle.setProperty('--vignette', String(t.atmosphere.vignette));
+  setWash();
   rootStyle.setProperty('--light-rgb', toUnit(t.light.color).map((c) => Math.round(c * 255)).join(' '));
   if (studio) studio.sync();
   updateLeaf();
