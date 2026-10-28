@@ -1,6 +1,6 @@
 {
 	"name": "dsh-nocturne",
-	"version": "0.3.7",
+	"version": "0.3.8",
 	"description": "DSH 的夜书桌：把 Typewriter-Nocturne 的纸、灯与墨搬进浏览器——WebGL 双通道着色器渲染纸纹与辐照度，multiply 合成在界面之上，不含拟物打字机。适配 DSH 桌面版（设置落盘、可与 dsh-claude-style 叠加）。",
 	"license": "MIT",
 	"type": "module",
