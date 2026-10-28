@@ -432,7 +432,10 @@ function clearSurfaces() {
 }
 
 function clearTokens() {
-  for (const name of TOKEN_NAMES) document.documentElement.style.removeProperty(name);
+  for (const name of TOKEN_NAMES) {
+    document.documentElement.style.removeProperty(name);
+    if (document.body) document.body.style.removeProperty(name);
+  }
 }
 
 function applyTokens() {
@@ -442,23 +445,30 @@ function applyTokens() {
     clearTokens();
     const p = paper();
     const root = document.documentElement.style;
+    const body = document.body && document.body.style;
     root.setProperty('--dn-sheet', 'transparent');
     root.setProperty('--dn-selection', washColor());
     for (const name of ['--dn-paper', '--dn-ink', '--dn-caret-ink', '--dn-metal-lo', '--dn-metal-hi', '--dn-metal']) {
-      root.setProperty(name, {
+      const value = {
         '--dn-paper': p.paper,
         '--dn-ink': p.ink,
         '--dn-caret-ink': p.cursor,
         '--dn-metal-lo': '#5e431c',
         '--dn-metal-hi': '#f3dca4',
         '--dn-metal': '#b8904c'
-      }[name]);
+      }[name];
+      root.setProperty(name, value);
+      if (body) body.setProperty(name, value);
     }
     return;
   }
-  const root = document.documentElement.style;
+  // 写在 html 和 body 两处：宿主在 body 上重新声明了这套 token，
+  // 只写 html 的话，从 body 往下拿到的仍是宿主的白。内联 important 高于任何样式表声明。
   const map = tokenMap(paper());
-  for (const name of Object.keys(map)) root.setProperty(name, map[name], 'important');
+  for (const target of [document.documentElement, document.body]) {
+    if (!target) continue;
+    for (const name of Object.keys(map)) target.style.setProperty(name, map[name], 'important');
+  }
 }
 
 function injectStyle() {
@@ -984,7 +994,10 @@ function mount() {
     if (style) style.remove();
     // token 还原：撤掉内联覆盖，宿主的主题立刻回来。
     clearTimeout(remoteTimer);
-    for (const name of TOKEN_NAMES) document.documentElement.style.removeProperty(name);
+    for (const name of TOKEN_NAMES) {
+      document.documentElement.style.removeProperty(name);
+      if (document.body) document.body.style.removeProperty(name);
+    }
     clearSurfaces();
     delete window.__dshNocturne;
   };
