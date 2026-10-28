@@ -1,0 +1,139 @@
+{
+  "source": "https://github.com/Chaosnap/Typewriter-Nocturne/blob/main/app/nocturne/papers.ts (MIT)",
+  "fetched": "2026-10-28",
+  "note": "Paper parameters are shader inputs, not bitmaps. No raster textures exist in the upstream repo.",
+  "lightInk": {
+    "ink": "#2a2019",
+    "inkMuted": "#6b5f52",
+    "cursor": "#3a2c20",
+    "selection": "rgba(52, 64, 112, 0.2)"
+  },
+  "nightInk": {
+    "ink": "#e6e1ea",
+    "inkMuted": "#9a94a6",
+    "cursor": "#e9e7ff",
+    "selection": "rgba(196, 188, 255, 0.2)"
+  },
+  "papers": [
+    {
+      "id": "cotton",
+      "name": "Cotton",
+      "appearance": "light",
+      "paper": "#eee6d5",
+      "surface": {
+        "crinkle": 0.3,
+        "felt": 1,
+        "laid": 0,
+        "linen": 0,
+        "mottle": 0.08,
+        "age": 0
+      }
+    },
+    {
+      "id": "laid",
+      "name": "Laid",
+      "appearance": "light",
+      "paper": "#f1e9d6",
+      "surface": {
+        "crinkle": 0.22,
+        "felt": 0,
+        "laid": 1,
+        "linen": 0,
+        "mottle": 0.18,
+        "age": 0
+      }
+    },
+    {
+      "id": "linen",
+      "name": "Linen",
+      "appearance": "light",
+      "paper": "#ebe5d8",
+      "surface": {
+        "crinkle": 0.2,
+        "felt": 0,
+        "laid": 0,
+        "linen": 1,
+        "mottle": 0.08,
+        "age": 0
+      }
+    },
+    {
+      "id": "onionskin",
+      "name": "Onionskin",
+      "appearance": "light",
+      "paper": "#f2f1ea",
+      "surface": {
+        "crinkle": 0.08,
+        "felt": 0,
+        "laid": 0,
+        "linen": 0,
+        "mottle": 0.04,
+        "age": 0
+      }
+    },
+    {
+      "id": "parchment",
+      "name": "Parchment",
+      "appearance": "light",
+      "paper": "#efdfbd",
+      "surface": {
+        "crinkle": 0.25,
+        "felt": 0,
+        "laid": 0,
+        "linen": 0,
+        "mottle": 1,
+        "age": 0.75
+      }
+    },
+    {
+      "id": "night",
+      "name": "Night",
+      "appearance": "dark",
+      "paper": "#1d1a20",
+      "surface": {
+        "crinkle": 0.3,
+        "felt": 0,
+        "laid": 0,
+        "linen": 0,
+        "mottle": 0.1,
+        "age": 0
+      }
+    }
+  ],
+  "lightAnsi": {
+    "black": "#2b231c",
+    "red": "#9c3a2a",
+    "green": "#4c6b2f",
+    "yellow": "#8a6a1c",
+    "blue": "#2f5277",
+    "magenta": "#7b3f6e",
+    "cyan": "#2e6b6a",
+    "white": "#7d7060",
+    "lightBlack": "#6e6153",
+    "lightRed": "#b0452a",
+    "lightGreen": "#557a33",
+    "lightYellow": "#94701a",
+    "lightBlue": "#3a6491",
+    "lightMagenta": "#8c4a7e",
+    "lightCyan": "#317876",
+    "lightWhite": "#5b4f43"
+  },
+  "nightAnsi": {
+    "black": "#2a2b42",
+    "red": "#d88a9a",
+    "green": "#9cc3a4",
+    "yellow": "#e2cf9a",
+    "blue": "#8ea8e0",
+    "magenta": "#b79ce0",
+    "cyan": "#8cc8d6",
+    "white": "#c9cadf",
+    "lightBlack": "#6f7192",
+    "lightRed": "#eba5b3",
+    "lightGreen": "#b4d8bc",
+    "lightYellow": "#efdfb2",
+    "lightBlue": "#aac0ef",
+    "lightMagenta": "#cbb5ef",
+    "lightCyan": "#a8dbe6",
+    "lightWhite": "#f0f0fa"
+  }
+}

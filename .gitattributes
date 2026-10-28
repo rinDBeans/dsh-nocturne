@@ -1,0 +1,8 @@
+# 文本统一 LF：Windows 上 checkout 成 CRLF 会让每次构建都产生整文件 diff。
+* text=auto eol=lf
+
+# 二进制不得做行尾转换
+*.png binary
+*.jpg binary
+*.woff2 binary
+*.tgz binary

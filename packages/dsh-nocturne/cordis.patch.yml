@@ -1,0 +1,5 @@
+# dsh-nocturne profile patch layer —— 只插一个 loader 条目。
+# 浏览器半由 dsh-client-modules 按 package.json 的 dsh.client 声明挑起来。
+- insert:
+    - id: nocturne
+      name: 'dsh-nocturne'

@@ -1,0 +1,131 @@
+/* dsh-nocturne —— 纸的配色由 token 决定，材质由 canvas 决定。
+   这里只做两件事：把 DSH 的语义别名换成纸与墨；给两片 canvas 找位置。
+   颜色取自 Typewriter-Nocturne 的 papers.ts（MIT）。 */
+
+html, :root {
+  --dn-paper: #efdfbd;
+  --dn-ink: #2a2019;
+  --dn-ink-muted: #6b5f52;
+  --dn-room: #241a14;
+  --dn-room-edge: #070504;
+  --dn-gilt: #6f5420;
+  --dn-light-rgb: 255 210 154;
+  --dn-metal-lo: #5e431c;
+  --dn-metal-hi: #f3dca4;
+  --dn-metal: #b8904c;
+  /* 缮写室面板用到的字族：宿主不一定有，给出与样张一致的回落链 */
+  --font-ui: "EB Garamond", "Iowan Old Style", Palatino, Georgia, serif;
+  --font-display: "Cormorant Garamond", "EB Garamond", Georgia, serif;
+  --font-mono: var(--dsh-font-family-code, ui-monospace, monospace);
+
+  --dsw-alias-bg-base: #efdfbd !important;
+  --dsw-alias-bg-layer-1: #eadcb9 !important;
+  --dsw-alias-bg-layer-2: #e6d5b0 !important;
+  --dsw-alias-bg-layer-3: #f2e4c6 !important;
+  --dsw-alias-bg-layer-4: #f6ebd3 !important;
+  --dsw-alias-bg-module-platform: #efdfbd !important;
+  --dsw-alias-bg-overlay: rgba(36, 26, 20, .55) !important;
+  --dsw-alias-bg-mask-1: rgba(42, 32, 25, .32) !important;
+  --dsw-alias-bg-document-selection: rgba(52, 64, 112, .2) !important;
+
+  --dsw-alias-label-primary: #2a2019 !important;
+  --dsw-alias-label-secondary: #6b5f52 !important;
+  --dsw-alias-label-tertiary: #7d7264 !important;
+  --dsw-alias-label-dimmed: #7d7264 !important;
+  --dsw-alias-label-caption: #6b5f52 !important;
+  --dsw-alias-label-primary-foreground: #f7efdd !important;
+  --dsw-alias-label-error: #9c3a2a !important;
+  --dsw-alias-label-shimmer: rgba(42, 32, 25, .18) !important;
+
+  --dsw-alias-link: #2f5277 !important;
+  --dsw-alias-menu-icon: #6b5f52 !important;
+
+  --dsw-alias-border-l1: rgba(42, 32, 25, .1) !important;
+  --dsw-alias-border-l2: rgba(42, 32, 25, .16) !important;
+  --dsw-alias-border-l3: rgba(42, 32, 25, .24) !important;
+  --dsw-alias-border-l4: rgba(42, 32, 25, .32) !important;
+  --dsw-alias-border-l2-darkmode-thin: rgba(42, 32, 25, .12) !important;
+
+  /* 装饰金只描边，文字金另立一支（金在纸上只有 2.43:1） */
+  --dsw-alias-brand-primary: #b08a4a !important;
+  --dsw-alias-button-primary-fill: #b08a4a !important;
+  --dsw-alias-button-primary-hover: #c9a45c !important;
+  --dsw-alias-button-ghost-active-fill: rgba(176, 138, 74, .18) !important;
+  --dsw-alias-button-ghost-active-border: rgba(176, 138, 74, .45) !important;
+  --dsw-alias-button-tool-bar-fill: rgba(42, 32, 25, .05) !important;
+
+  --dsw-alias-interactive-bg-hover: rgba(42, 32, 25, .06) !important;
+  --dsw-alias-interactive-bg-active: rgba(42, 32, 25, .1) !important;
+  --dsw-alias-interactive-bg-hover-danger: rgba(156, 58, 42, .08) !important;
+
+  --dsw-alias-state-success-primary: #4c6b2f !important;
+  --dsw-alias-state-warn-primary: #8a6a1c !important;
+  --dsw-alias-state-warn-tertiary: #6f5420 !important;
+  --dsw-alias-state-warn-label: #6f5420 !important;
+  --dsw-alias-state-error-primary: #9c3a2a !important;
+  --dsw-alias-state-business-primary: #2f5277 !important;
+  --dsw-alias-state-idle-primary: #7d7264 !important;
+  --dsw-alias-state-success-tertiary: rgba(76, 107, 47, .16) !important;
+
+  --dsw-alias-markdown-code-block: #e6d5b0 !important;
+  --dsw-alias-markdown-code-block-banner: #e0cda6 !important;
+  --dsw-alias-markdown-inline-code: #e0cda6 !important;
+  --dsw-alias-markdown-tag: #6f5420 !important;
+  --dsw-alias-code-diff-added: rgba(76, 107, 47, .16) !important;
+  --dsw-alias-code-diff-deleted: rgba(156, 58, 42, .14) !important;
+
+  --dsw-alias-scrollbar-bg-l2: rgba(42, 32, 25, .14) !important;
+  --dsw-alias-scrollbar-hover-l2: rgba(42, 32, 25, .26) !important;
+  --dsw-alias-switch-thumb: #f7efdd !important;
+
+  --dsw-alias-tooltip-bg: #2b231c !important;
+  --dsw-alias-tooltip-key-bg: #3a2f27 !important;
+  --dsw-alias-toast-bg: #2b231c !important;
+  --dsw-alias-toast-label: #f7efdd !important;
+  --dsw-alias-menu-group-header-fill: rgba(233, 217, 182, .94) !important;
+
+  /* 字体：衬线正文，等宽复古代码。字体文件不随包分发，走系统栈回落。 */
+  --dsh-font-family-text: "EB Garamond", "Iowan Old Style", "Palatino Linotype", Palatino,
+    Georgia, "Source Han Serif SC", "Songti SC", "Noto Serif CJK SC", serif !important;
+  --dsh-font-family-code: "Courier Prime", "IBM Plex Mono", "Courier New",
+    "DejaVu Sans Mono", ui-monospace, monospace !important;
+}
+
+/* 整扇窗就是这张纸。没被画到的地方也必须落到纸色上——否则留给 `html` 的
+   默认底会把正文区露成黑洞（第一次装载测试就是这么翻车的）。 */
+html, body { background: var(--dsw-alias-bg-base, #efdfbd) !important; }
+
+/* 两片 canvas：直接挂在 body 下，不能包一层带 z-index 的容器——
+   那会给它们造一个隔离栈，multiply 就再也合不到页面上（实测见 docs/nocturne.md）。 */
+canvas[data-dn="paper"], canvas[data-dn="glow"] {
+  position: fixed;
+  left: 0;
+  top: 0;
+  display: block;
+  pointer-events: none;
+  transform-origin: 0 0;
+}
+canvas[data-dn="paper"] {
+  mix-blend-mode: multiply;
+  z-index: 2147482000;
+}
+canvas[data-dn="glow"] {
+  mix-blend-mode: screen;
+  z-index: 2147482001;
+}
+
+/* 纸的四边压暗，给出"一张纸"的厚度；比 TN 的 #vignette 更贴边，
+   因为这里的纸是整扇窗。 */
+html::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 2147482002;
+  pointer-events: none;
+  background: radial-gradient(ellipse 92% 88% at 50% 46%, transparent 52%, rgba(0, 0, 0, .42) 100%);
+}
+
+/* 缮写室是"器物"，不是纸上的字：它悬在纸光之上，不被灯压暗——
+   与上游一致，Studio 属于窗框而不属于纸面。 */
+.dn-studio { z-index: 2147483000; }
+.dn-handle { z-index: 2147482999; opacity: .55; }

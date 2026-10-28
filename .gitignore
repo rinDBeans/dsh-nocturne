@@ -1,0 +1,18 @@
+# 探针与临时物：上游仓库的浅克隆、无头浏览器档案、对比截图、一次性脚本。
+# 它们只服务于标定过程，不进版本库（本机可能几百 MB）。
+_probe/
+
+# 打包产物
+*.tgz
+packages/*/dist/
+
+# 依赖
+node_modules/
+
+# 系统与编辑器
+.DS_Store
+Thumbs.db
+desktop.ini
+.idea/
+.vscode/
+*.swp

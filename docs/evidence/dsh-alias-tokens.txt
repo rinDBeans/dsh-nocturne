@@ -1,0 +1,21 @@
+# DSH --dsw-alias-* tokens referenced by the shipped web frontend bundle
+# Source: dsh/node_modules/@deepseek-ai/dsh-web-frontend/dist/assets/index-BNyAYEM7.css (DSH 0.2.1-rc.3)
+# 55 alias tokens are referenced by component CSS. A working third-party skin (dsh-dream-skin)
+# overrides only 25 of them and still looks complete, because unsets fall back to the built-in palette.
+--dsw-alias-bg-base --dsw-alias-bg-layer-1 --dsw-alias-bg-layer-2 --dsw-alias-bg-layer-3 --dsw-alias-bg-layer-4
+--dsw-alias-bg-module-platform --dsw-alias-bg-mask-1 --dsw-alias-bg-overlay --dsw-alias-bg-document-selection
+--dsw-alias-label-primary --dsw-alias-label-secondary --dsw-alias-label-tertiary --dsw-alias-label-dimmed
+--dsw-alias-label-caption --dsw-alias-label-shimmer --dsw-alias-label-error --dsw-alias-label-primary-foreground
+--dsw-alias-link --dsw-alias-menu-icon
+--dsw-alias-border-l1 --dsw-alias-border-l2 --dsw-alias-border-l3 --dsw-alias-border-l4 --dsw-alias-border-l2-darkmode-thin
+--dsw-alias-brand-primary --dsw-alias-button-primary-fill --dsw-alias-button-primary-hover
+--dsw-alias-button-ghost-active-fill --dsw-alias-button-ghost-active-border --dsw-alias-button-tool-bar-fill
+--dsw-alias-interactive-bg-hover --dsw-alias-interactive-bg-active --dsw-alias-interactive-bg-hover-danger
+--dsw-alias-state-success-primary --dsw-alias-state-warn-primary --dsw-alias-state-warn-tertiary
+--dsw-alias-state-warn-label --dsw-alias-state-error-primary --dsw-alias-state-business-primary
+--dsw-alias-state-idle-primary --dsw-alias-state-success-tertiary
+--dsw-alias-markdown-code-block --dsw-alias-markdown-code-block-banner --dsw-alias-markdown-inline-code
+--dsw-alias-markdown-tag --dsw-alias-code-diff-added --dsw-alias-code-diff-deleted
+--dsw-alias-scrollbar-bg-l2 --dsw-alias-scrollbar-hover-l2 --dsw-alias-switch-thumb
+--dsw-alias-tooltip-bg --dsw-alias-tooltip-key-bg --dsw-alias-toast-bg --dsw-alias-toast-label
+--dsw-alias-menu-group-header-fill --dsw-alias-turn-trigger-*
