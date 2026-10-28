@@ -428,6 +428,14 @@ tr:last-child td{border-bottom:0}
   transform:translateX(17px);
   background:radial-gradient(circle at 35% 35%, #f3dca4, #b8904c 60%, #5e431c);
 }
+.dn-studio button.reset{
+  width:100%; padding:6px 8px;
+  border:1px solid rgba(176,138,74,.45); border-radius:6px;
+  background:rgba(255,215,154,.1); color:#f3dca4;
+  font-family:var(--font-ui); font-size:13px; cursor:pointer;
+}
+.dn-studio button.reset:hover{background:rgba(255,215,154,.18)}
+.dn-studio button.reset:focus-visible{outline:1px dotted #b08a4a; outline-offset:2px}
 .dn-studio .note{
   margin:0; font-size:12px; line-height:1.5;
   color:rgba(241,230,207,.55);
@@ -681,6 +689,12 @@ const SETTINGS = {
 };
 const theme = () => THEMES[SETTINGS.theme];
 const paper = () => PAPERS[SETTINGS.paper];
+
+/**
+ * 标定值：这一组是亮度分布对到上游官方截图（p50≈115 / p95≈178）的那一套。
+ * 把滑杆推散之后还能一键回家——"复刻"得有个可回的基准。
+ */
+const NOCTURNE_DEFAULTS = JSON.parse(JSON.stringify(SETTINGS));
 
 /* ═══════════════════════════════════════════════════════════════════════════
    2 · 小工具
@@ -1781,6 +1795,7 @@ function buildStudio(options) {
   part.push('<div class="group"><h3>光标</h3><div class="grid" data-group="cursor"></div></div>');
   part.push('<div class="group"><h3>共存</h3><div class="grid" data-group="coexist"></div>'
     + '<p class="note" data-group="coexist-hint" hidden></p></div>');
+  part.push('<div class="group"><button class="reset" type="button">回到标定值</button></div>');
   part.push('<div class="group"><p class="note">纸、灯、墨的色值与纸面参数取自 Typewriter-Nocturne（MIT）。'
     + '这里的每一项都直接改渲染参数，改完即见。</p></div>');
   root.innerHTML = part.join('');
@@ -1856,6 +1871,11 @@ function buildStudio(options) {
     const next = toggle.getAttribute('aria-checked') !== 'true';
     toggle.setAttribute('aria-checked', String(next));
     onChange('lamp', next);
+  });
+
+  root.querySelector('.reset').addEventListener('click', () => {
+    onChange('preset', 'calibrated');
+    sync();
   });
 
   root.querySelector('.close').addEventListener('click', () => {
@@ -2102,6 +2122,17 @@ let studio = null;
 studio = buildStudio({
   state: () => SETTINGS,
   onChange(key, value) {
+    if (key === 'preset') {
+      Object.assign(SETTINGS, JSON.parse(JSON.stringify(NOCTURNE_DEFAULTS)));
+      applyTheme(SETTINGS.theme);
+      applyPaper(SETTINGS.paper);
+      inkCaret.setMode(SETTINGS.cursorMode);
+      lampButton.setAttribute('aria-pressed', String(SETTINGS.lamp));
+      needsBuild = true;
+      needsLight = true;
+      studio.sync();
+      return;
+    }
     if (key === 'paper') { applyPaper(value); return; }
     if (key === 'theme') { applyTheme(value); return; }
     if (key === 'cursor') {

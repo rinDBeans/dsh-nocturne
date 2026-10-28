@@ -17,7 +17,7 @@ const SETTING_KEYS = ['paper', 'theme', 'lamp', 'enabled', 'intensity', 'spread'
 const TOKEN_NAMES = ['--dsw-alias-bg-base', '--dsw-alias-bg-module-platform', '--dsw-alias-bg-layer-1',
   '--dsw-alias-bg-layer-2', '--dsw-alias-label-primary', '--dsw-alias-label-secondary',
   '--dsw-alias-label-tertiary', '--dn-paper', '--dn-ink', '--dn-caret-ink', '--dn-light-rgb',
-  '--dn-metal-lo', '--dn-metal-hi', '--dn-metal'];
+  '--dn-metal-lo', '--dn-metal-hi', '--dn-metal', '--dn-sheet'];
 let remoteTimer = 0;
 let lastDiag = null;
 const measure = document.createElement('canvas').getContext('2d');
@@ -157,35 +157,61 @@ function tokenMode() {
   return foreignSkin() ? 'material' : 'full';
 }
 
-function applyTokens() {
-  const p = paper();
+/**
+ * 纸色做成一张 token 表，运行时内联写入并且带 !important。
+ *
+ * 为什么不能靠样式表：样式表里的 !important 会压过内联的普通声明。
+ * 早先那版把默认值写在 style.css 里、运行时用内联去改，结果换纸只换了画布，
+ * 界面底色一直停在默认那张纸上——这条是桌面版自检抓到的（bgBase 与 dnPaper 不一致）。
+ * 现在样式表只管 canvas / 光标 / 面板这些不会变的东西，配色一律运行时写。
+ */
+function tokenMap(p) {
   const dark = p.appearance === 'dark';
-  const root = document.documentElement.style;
-  // 「只叠材质」：不碰宿主的配色 token，只留纸与灯——这样两套皮肤可以叠着用。
-  if (tokenMode() === 'material') {
-    root.setProperty('--dn-paper', p.paper);
-    root.setProperty('--dn-ink', p.ink);
-    root.setProperty('--dn-caret-ink', p.cursor);
-    root.setProperty('--dn-metal-lo', '#5e431c');
-    root.setProperty('--dn-metal-hi', '#f3dca4');
-    root.setProperty('--dn-metal', '#b8904c');
-    return;
-  }
-  root.setProperty('--dsw-alias-bg-base', p.paper);
-  root.setProperty('--dsw-alias-bg-module-platform', p.paper);
-  root.setProperty('--dsw-alias-bg-layer-1', dark ? '#242028' : '#eadcb9');
-  root.setProperty('--dsw-alias-bg-layer-2', dark ? '#1a171d' : '#e6d5b0');
-  root.setProperty('--dsw-alias-label-primary', p.ink);
-  root.setProperty('--dsw-alias-label-secondary', p.inkMuted);
-  root.setProperty('--dn-paper', p.paper);
-  root.setProperty('--dn-ink', p.ink);
-  root.setProperty('--dn-caret-ink', p.cursor);
-  host_cursor(p);
+  return {
+    '--dsw-alias-bg-base': p.paper,
+    '--dsw-alias-bg-module-platform': p.paper,
+    '--dsw-alias-bg-layer-1': dark ? '#242028' : '#eadcb9',
+    '--dsw-alias-bg-layer-2': dark ? '#1a171d' : '#e6d5b0',
+    '--dsw-alias-label-primary': p.ink,
+    '--dsw-alias-label-secondary': p.inkMuted,
+    '--dsw-alias-label-tertiary': dark ? '#8f89a6' : '#7d7264',
+    '--dn-paper': p.paper,
+    '--dn-ink': p.ink,
+    '--dn-caret-ink': p.cursor,
+    '--dn-metal-lo': '#5e431c',
+    '--dn-metal-hi': '#f3dca4',
+    '--dn-metal': '#b8904c',
+    // 纸的底色：整窗背景挂在它上面，卸载/让位时一并还原
+    '--dn-sheet': p.paper
+  };
 }
 
-function host_cursor(p) {
+function clearTokens() {
+  for (const name of TOKEN_NAMES) document.documentElement.style.removeProperty(name);
+}
+
+function applyTokens() {
+  // 「只叠材质」：一个宿主配色 token 都不碰，只留纸与灯——两套皮肤可以叠着用。
+  if (tokenMode() === 'material') {
+    clearTokens();
+    const p = paper();
+    const root = document.documentElement.style;
+    root.setProperty('--dn-sheet', 'transparent');
+    for (const name of ['--dn-paper', '--dn-ink', '--dn-caret-ink', '--dn-metal-lo', '--dn-metal-hi', '--dn-metal']) {
+      root.setProperty(name, {
+        '--dn-paper': p.paper,
+        '--dn-ink': p.ink,
+        '--dn-caret-ink': p.cursor,
+        '--dn-metal-lo': '#5e431c',
+        '--dn-metal-hi': '#f3dca4',
+        '--dn-metal': '#b8904c'
+      }[name]);
+    }
+    return;
+  }
   const root = document.documentElement.style;
-  root.setProperty('--dsw-alias-label-tertiary', p.appearance === 'dark' ? '#8f89a6' : '#7d7264');
+  const map = tokenMap(paper());
+  for (const name of Object.keys(map)) root.setProperty(name, map[name], 'important');
 }
 
 function injectStyle() {
@@ -263,6 +289,10 @@ function mount() {
       paperLight.render(rig, paper(), animateGrain ? time : 0);
       needsLight = false;
       lastLightAt = now;
+      if (diagPending) {
+        diagPending = false;
+        reportDiag();
+      }
     }
 
     const lightChannels = toUnit(theme().light.color).map((c) => Math.round(c * 255));
@@ -320,8 +350,41 @@ function mount() {
   frameId = requestAnimationFrame(frame);
 
   // 跑起来 2 秒后报一次自检：WebGL 起没起来、纸画出来没有、token 实际是什么。
-  setTimeout(() => {
-    if (stopped) return;
+  // 像素采样必须在 drawArrays 之后立刻做（默认不保留绘制缓冲），所以由帧循环触发。
+  let diagPending = false;
+  setTimeout(() => { diagPending = true; }, 2000);
+
+  /** 从真实帧缓冲里按网格取样，算纸面的亮度分布——这是"画出来了没有"的硬证据。 */
+  function samplePaper() {
+    try {
+      const gl = paperCanvas.getContext('webgl2');
+      if (!gl || gl.isContextLost()) return null;
+      const w = paperCanvas.width;
+      const h = paperCanvas.height;
+      const cols = 28;
+      const rows = 16;
+      const pixel = new Uint8Array(4);
+      const values = [];
+      for (let row = 0; row < rows; row++) {
+        for (let col = 0; col < cols; col++) {
+          const x = Math.min(w - 1, Math.round(((col + 0.5) / cols) * w));
+          const y = Math.min(h - 1, Math.round(((row + 0.5) / rows) * h));
+          gl.readPixels(x, y, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, pixel);
+          values.push(0.2126 * pixel[0] + 0.7152 * pixel[1] + 0.0722 * pixel[2]);
+        }
+      }
+      values.sort((m, n) => m - n);
+      const at = (q) => Math.round(values[Math.min(values.length - 1, Math.floor(q * values.length))]);
+      return {
+        mean: Math.round(values.reduce((s, v) => s + v, 0) / values.length),
+        p05: at(0.05), p50: at(0.5), p95: at(0.95), max: Math.round(values[values.length - 1])
+      };
+    } catch (error) {
+      return null;
+    }
+  }
+
+  function reportDiag() {
     let renderer = '';
     let webgl2 = false;
     try {
@@ -347,10 +410,12 @@ function mount() {
       canvases: document.querySelectorAll('canvas[' + PAPER_ATTR + ']').length,
       caret: caret.shown ? caret.mode : 'hidden',
       papers: Object.keys(PAPERS).length,
-      themes: Object.keys(THEMES).length
+      themes: Object.keys(THEMES).length,
+      // 与标定基准同口径：上游参考值 p50≈115 / p95≈178（1440×900、parchment、balanced 灯）
+      paperPixels: samplePaper()
     };
     persist();
-  }, 2000);
+  }
 
   // 缮写室：与样张同一份 builder，所以两处的面板不会长歪。
   const studio = buildStudio({
@@ -358,6 +423,17 @@ function mount() {
     foreign: foreignSkin,
     resolvedCoexist: tokenMode,
     onChange(key, value) {
+      if (key === 'preset') {
+        // 标定值：与样张同一份 NOCTURNE_DEFAULTS，两边不会各有一组"默认"。
+        Object.assign(SETTINGS, JSON.parse(JSON.stringify(NOCTURNE_DEFAULTS)));
+        caret.setMode(SETTINGS.cursorMode);
+        applyTokens();
+        studio.sync();
+        persist();
+        needsBuild = true;
+        reposition();
+        return;
+      }
       if (key === 'coexist') {
         SETTINGS.coexist = value;
         studio.sync();

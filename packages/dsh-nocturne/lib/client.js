@@ -4,8 +4,8 @@
  * 纸、灯、辉光三层的渲染代码由 tools/build.mjs 从 sample/nocturne-desk.html 抽取；
  * 上游配方来自 Chaosnap/Typewriter-Nocturne（MIT），随包保留其版权行。
  *
- *   核心 1323 行 · 适配 497 行 · 样式 132 行
- *   样张 sample/nocturne-desk.html（94087 bytes）
+ *   核心 1335 行 · 适配 573 行 · 样式 70 行
+ *   样张 sample/nocturne-desk.html（95334 bytes）
  */
 window.__ModuleLoader__.load({
   id: 'dsh-nocturne',
@@ -101,6 +101,12 @@ const SETTINGS = {
 };
 const theme = () => THEMES[SETTINGS.theme];
 const paper = () => PAPERS[SETTINGS.paper];
+
+/**
+ * 标定值：这一组是亮度分布对到上游官方截图（p50≈115 / p95≈178）的那一套。
+ * 把滑杆推散之后还能一键回家——"复刻"得有个可回的基准。
+ */
+const NOCTURNE_DEFAULTS = JSON.parse(JSON.stringify(SETTINGS));
 
 /* ═══════════════════════════════════════════════════════════════════════════
    2 · 小工具
@@ -1201,6 +1207,7 @@ function buildStudio(options) {
   part.push('<div class="group"><h3>光标</h3><div class="grid" data-group="cursor"></div></div>');
   part.push('<div class="group"><h3>共存</h3><div class="grid" data-group="coexist"></div>'
     + '<p class="note" data-group="coexist-hint" hidden></p></div>');
+  part.push('<div class="group"><button class="reset" type="button">回到标定值</button></div>');
   part.push('<div class="group"><p class="note">纸、灯、墨的色值与纸面参数取自 Typewriter-Nocturne（MIT）。'
     + '这里的每一项都直接改渲染参数，改完即见。</p></div>');
   root.innerHTML = part.join('');
@@ -1278,6 +1285,11 @@ function buildStudio(options) {
     onChange('lamp', next);
   });
 
+  root.querySelector('.reset').addEventListener('click', () => {
+    onChange('preset', 'calibrated');
+    sync();
+  });
+
   root.querySelector('.close').addEventListener('click', () => {
     root.dataset.open = 'false';
     handle.setAttribute('aria-expanded', 'false');
@@ -1338,7 +1350,7 @@ function buildStudio(options) {
   return {element: root, handle, sync};
 }
 
-const CSS_TEXT = "/* dsh-nocturne —— 纸的配色由 token 决定，材质由 canvas 决定。\n   这里只做两件事：把 DSH 的语义别名换成纸与墨；给两片 canvas 找位置。\n   颜色取自 Typewriter-Nocturne 的 papers.ts（MIT）。 */\n\nhtml, :root {\n  --dn-paper: #efdfbd;\n  --dn-ink: #2a2019;\n  --dn-ink-muted: #6b5f52;\n  --dn-room: #241a14;\n  --dn-room-edge: #070504;\n  --dn-gilt: #6f5420;\n  --dn-light-rgb: 255 210 154;\n  --dn-metal-lo: #5e431c;\n  --dn-metal-hi: #f3dca4;\n  --dn-metal: #b8904c;\n  /* 缮写室面板用到的字族：宿主不一定有，给出与样张一致的回落链 */\n  --font-ui: \"EB Garamond\", \"Iowan Old Style\", Palatino, Georgia, serif;\n  --font-display: \"Cormorant Garamond\", \"EB Garamond\", Georgia, serif;\n  --font-mono: var(--dsh-font-family-code, ui-monospace, monospace);\n\n  --dsw-alias-bg-base: #efdfbd !important;\n  --dsw-alias-bg-layer-1: #eadcb9 !important;\n  --dsw-alias-bg-layer-2: #e6d5b0 !important;\n  --dsw-alias-bg-layer-3: #f2e4c6 !important;\n  --dsw-alias-bg-layer-4: #f6ebd3 !important;\n  --dsw-alias-bg-module-platform: #efdfbd !important;\n  --dsw-alias-bg-overlay: rgba(36, 26, 20, .55) !important;\n  --dsw-alias-bg-mask-1: rgba(42, 32, 25, .32) !important;\n  --dsw-alias-bg-document-selection: rgba(52, 64, 112, .2) !important;\n\n  --dsw-alias-label-primary: #2a2019 !important;\n  --dsw-alias-label-secondary: #6b5f52 !important;\n  --dsw-alias-label-tertiary: #7d7264 !important;\n  --dsw-alias-label-dimmed: #7d7264 !important;\n  --dsw-alias-label-caption: #6b5f52 !important;\n  --dsw-alias-label-primary-foreground: #f7efdd !important;\n  --dsw-alias-label-error: #9c3a2a !important;\n  --dsw-alias-label-shimmer: rgba(42, 32, 25, .18) !important;\n\n  --dsw-alias-link: #2f5277 !important;\n  --dsw-alias-menu-icon: #6b5f52 !important;\n\n  --dsw-alias-border-l1: rgba(42, 32, 25, .1) !important;\n  --dsw-alias-border-l2: rgba(42, 32, 25, .16) !important;\n  --dsw-alias-border-l3: rgba(42, 32, 25, .24) !important;\n  --dsw-alias-border-l4: rgba(42, 32, 25, .32) !important;\n  --dsw-alias-border-l2-darkmode-thin: rgba(42, 32, 25, .12) !important;\n\n  /* 装饰金只描边，文字金另立一支（金在纸上只有 2.43:1） */\n  --dsw-alias-brand-primary: #b08a4a !important;\n  --dsw-alias-button-primary-fill: #b08a4a !important;\n  --dsw-alias-button-primary-hover: #c9a45c !important;\n  --dsw-alias-button-ghost-active-fill: rgba(176, 138, 74, .18) !important;\n  --dsw-alias-button-ghost-active-border: rgba(176, 138, 74, .45) !important;\n  --dsw-alias-button-tool-bar-fill: rgba(42, 32, 25, .05) !important;\n\n  --dsw-alias-interactive-bg-hover: rgba(42, 32, 25, .06) !important;\n  --dsw-alias-interactive-bg-active: rgba(42, 32, 25, .1) !important;\n  --dsw-alias-interactive-bg-hover-danger: rgba(156, 58, 42, .08) !important;\n\n  --dsw-alias-state-success-primary: #4c6b2f !important;\n  --dsw-alias-state-warn-primary: #8a6a1c !important;\n  --dsw-alias-state-warn-tertiary: #6f5420 !important;\n  --dsw-alias-state-warn-label: #6f5420 !important;\n  --dsw-alias-state-error-primary: #9c3a2a !important;\n  --dsw-alias-state-business-primary: #2f5277 !important;\n  --dsw-alias-state-idle-primary: #7d7264 !important;\n  --dsw-alias-state-success-tertiary: rgba(76, 107, 47, .16) !important;\n\n  --dsw-alias-markdown-code-block: #e6d5b0 !important;\n  --dsw-alias-markdown-code-block-banner: #e0cda6 !important;\n  --dsw-alias-markdown-inline-code: #e0cda6 !important;\n  --dsw-alias-markdown-tag: #6f5420 !important;\n  --dsw-alias-code-diff-added: rgba(76, 107, 47, .16) !important;\n  --dsw-alias-code-diff-deleted: rgba(156, 58, 42, .14) !important;\n\n  --dsw-alias-scrollbar-bg-l2: rgba(42, 32, 25, .14) !important;\n  --dsw-alias-scrollbar-hover-l2: rgba(42, 32, 25, .26) !important;\n  --dsw-alias-switch-thumb: #f7efdd !important;\n\n  --dsw-alias-tooltip-bg: #2b231c !important;\n  --dsw-alias-tooltip-key-bg: #3a2f27 !important;\n  --dsw-alias-toast-bg: #2b231c !important;\n  --dsw-alias-toast-label: #f7efdd !important;\n  --dsw-alias-menu-group-header-fill: rgba(233, 217, 182, .94) !important;\n\n  /* 字体：衬线正文，等宽复古代码。字体文件不随包分发，走系统栈回落。 */\n  --dsh-font-family-text: \"EB Garamond\", \"Iowan Old Style\", \"Palatino Linotype\", Palatino,\n    Georgia, \"Source Han Serif SC\", \"Songti SC\", \"Noto Serif CJK SC\", serif !important;\n  --dsh-font-family-code: \"Courier Prime\", \"IBM Plex Mono\", \"Courier New\",\n    \"DejaVu Sans Mono\", ui-monospace, monospace !important;\n}\n\n/* 整扇窗就是这张纸。没被画到的地方也必须落到纸色上——否则留给 `html` 的\n   默认底会把正文区露成黑洞（第一次装载测试就是这么翻车的）。 */\nhtml, body { background: var(--dsw-alias-bg-base, #efdfbd) !important; }\n\n/* 两片 canvas：直接挂在 body 下，不能包一层带 z-index 的容器——\n   那会给它们造一个隔离栈，multiply 就再也合不到页面上（实测见 docs/nocturne.md）。 */\ncanvas[data-dn=\"paper\"], canvas[data-dn=\"glow\"] {\n  position: fixed;\n  left: 0;\n  top: 0;\n  display: block;\n  pointer-events: none;\n  transform-origin: 0 0;\n}\ncanvas[data-dn=\"paper\"] {\n  mix-blend-mode: multiply;\n  z-index: 2147482000;\n}\ncanvas[data-dn=\"glow\"] {\n  mix-blend-mode: screen;\n  z-index: 2147482001;\n}\n\n/* 纸的四边压暗，给出\"一张纸\"的厚度；比 TN 的 #vignette 更贴边，\n   因为这里的纸是整扇窗。 */\nhtml::after {\n  content: \"\";\n  position: fixed;\n  inset: 0;\n  z-index: 2147482002;\n  pointer-events: none;\n  background: radial-gradient(ellipse 92% 88% at 50% 46%, transparent 52%, rgba(0, 0, 0, .42) 100%);\n}\n\n/* 缮写室是\"器物\"，不是纸上的字：它悬在纸光之上，不被灯压暗——\n   与上游一致，Studio 属于窗框而不属于纸面。 */\n.dn-studio { z-index: 2147483000; }\n.dn-handle { z-index: 2147482999; opacity: .55; }\n\n\n.dn-caret{\n  position:fixed; left:0; top:0; z-index: 2147481999;\n  display:none; pointer-events:none; will-change:transform;\n  --dn-ink-size:16px;\n  --dn-ink-weight:400;\n}\n.dn-ink-blot,\n.dn-ink-halo{\n  position:absolute; inset:7% 0.5px;\n  background:var(--dn-caret-ink, #3a2c20);\n}\n.dn-ink-blot{\n  border-radius:22% 14% 18% 12% / 12% 20% 10% 18%;\n  box-shadow:\n    inset 0 0 0 .5px rgba(0,0,0,.22),\n    inset 0 0 3px rgba(0,0,0,.28),\n    0 0 1.2px var(--dn-caret-ink, #3a2c20);\n  filter:blur(.3px);\n}\n.dn-ink-halo{\n  border-radius:40%;\n  opacity:0;\n  filter:blur(2.5px);\n}\n.dn-ink-glyph{\n  position:absolute; inset:0;\n  display:flex; align-items:center; justify-content:center;\n  color:var(--dsw-alias-bg-base, #efdfbd);\n  font-family:var(--dsh-font-family-code, ui-monospace, monospace);\n  font-size:var(--dn-ink-size);\n  font-weight:var(--dn-ink-weight);\n  line-height:1; white-space:pre;\n  font-variant-ligatures:none;\n}\n/* 失焦时墨退掉，只留一个淡淡的格子轮廓。 */\n.dn-caret[data-focused=\"false\"] .dn-ink-blot,\n.dn-caret[data-focused=\"false\"] .dn-ink-halo,\n.dn-caret[data-focused=\"false\"] .dn-ink-glyph{ display:none }\n.dn-caret[data-focused=\"false\"]::after{\n  content:\"\"; position:absolute; inset:7% .5px;\n  border:1px solid var(--dn-caret-ink, #3a2c20); border-radius:2px; opacity:.45;\n}\n.dn-caret[data-appearance=\"dark\"] .dn-ink-blot{\n  box-shadow:\n    inset 0 0 0 .5px rgba(255,255,255,.25),\n    inset 0 0 3px rgba(255,255,255,.3),\n    0 0 1.2px var(--dn-caret-ink, #3a2c20);\n}\n/* ── 羽毛笔光标：形状、渐变、摆动、光晕都照搬上游 .tn-quill ─────────────── */\n.dn-quill{\n  position:fixed; left:0; top:0; z-index:1;\n  display:none; pointer-events:none; will-change:transform;\n  --dn-quill-edge:#120e0c;\n  --dn-quill-body:#2b2420;\n  --dn-quill-sheen:#5f5753;\n  --dn-quill-barb:rgba(168,152,138,.42);\n  --dn-quill-rachis:#e4d8c0;\n  --dn-quill-down:rgba(70,60,54,.65);\n  filter:drop-shadow(.8px 1.6px 1px rgba(0,0,0,.3));\n  animation:dn-quill-breathe 1.2s ease-in-out infinite alternate;\n}\n.dn-quill[data-appearance=\"dark\"]{\n  --dn-quill-edge:#9d9485;\n  --dn-quill-body:#ebe4d6;\n  --dn-quill-sheen:#fffdf8;\n  --dn-quill-barb:rgba(140,128,108,.5);\n  --dn-quill-rachis:#fffdf6;\n  --dn-quill-down:rgba(236,229,216,.75);\n}\n.dn-quill svg{display:block; width:100%; height:100%; overflow:visible}\n.dn-quill-sway{transform-box:view-box; transform-origin:0 0; animation:dn-quill-sway 3.4s ease-in-out infinite alternate}\n.dn-quill-vane{fill:url(#dn-quill-vane)}\n.dn-quill-barbs{fill:none; stroke:var(--dn-quill-barb); stroke-width:.28; stroke-linecap:round}\n.dn-quill-rachis{fill:var(--dn-quill-rachis)}\n.dn-quill-rachis-light{fill:none; stroke:#fff; stroke-width:.22; opacity:.55}\n.dn-quill-down{fill:none; stroke:var(--dn-quill-down); stroke-width:.35; stroke-linecap:round}\n.dn-quill-engraving{fill:none; stroke:var(--dn-metal-lo); stroke-width:.3}\n.dn-quill-hole{fill:var(--dn-metal-lo)}\n.dn-quill-shine{fill:#fff; opacity:.2; animation:dn-quill-shine 2.8s ease-in-out infinite}\n.dn-quill-glint{fill:#fff; opacity:0; animation:dn-quill-glint 2.8s ease-in-out infinite}\n.dn-quill[data-focused=\"false\"]{opacity:.4; animation:none}\n.dn-quill[data-focused=\"false\"] .dn-quill-sway,\n.dn-quill[data-focused=\"false\"] .dn-quill-shine,\n.dn-quill[data-focused=\"false\"] .dn-quill-glint{animation:none}\n@keyframes dn-quill-breathe{from{opacity:1} to{opacity:.62}}\n@keyframes dn-quill-sway{from{transform:rotate(-1.6deg)} to{transform:rotate(1.6deg)}}\n@keyframes dn-quill-shine{0%{transform:translateY(0)} 100%{transform:translateY(-46px)}}\n@keyframes dn-quill-glint{\n  0%,72%{opacity:0}\n  80%{opacity:.9}\n  88%{opacity:.15}\n  100%{opacity:0}\n}\n\n/* ── 缮写室 Studio：一张悬在桌上的深色玻璃面板 ─────────────────────────── */\n.dn-studio{\n  position:fixed; z-index:40; top:52px; right:18px;\n  width:296px; max-height:calc(100% - 88px); overflow-y:auto;\n  padding:16px 18px 18px;\n  border:1px solid rgba(176,138,74,.35);\n  border-radius:12px;\n  background:rgba(22,16,12,.9);\n  backdrop-filter:blur(12px);\n  box-shadow:0 24px 60px -20px rgba(0,0,0,.8);\n  color:#f1e6cf;\n  font-family:var(--font-ui);\n  display:none;\n}\n.dn-studio[data-open=\"true\"]{display:block}\n.dn-studio .eyebrow{\n  font-variant:small-caps; letter-spacing:.2em; font-size:11px;\n  color:rgba(241,230,207,.62);\n}\n.dn-studio h2{\n  margin:0 0 10px;\n  font-family:var(--font-display); font-style:italic; font-weight:500;\n  font-size:23px; line-height:1.2; text-wrap:balance;\n}\n.dn-studio .group{\n  margin-top:13px; padding-top:11px;\n  border-top:1px solid rgba(176,138,74,.28);\n  display:grid; gap:9px;\n}\n.dn-studio .group h3{\n  margin:0; font-weight:500; font-style:italic; font-size:16px;\n}\n.dn-studio .grid{display:grid; grid-template-columns:repeat(3, 1fr); gap:5px}\n.dn-studio .grid.two{grid-template-columns:repeat(2, 1fr)}\n.dn-studio button.choice{\n  padding:5px 4px 6px;\n  border:1px solid rgba(176,138,74,.3); border-radius:6px;\n  background:transparent; color:#f1e6cf;\n  font-family:var(--font-ui); font-size:12.5px; line-height:1.2;\n  cursor:pointer; display:grid; gap:4px; justify-items:stretch;\n}\n.dn-studio button.choice[aria-pressed=\"true\"]{\n  border-color:#b08a4a;\n  box-shadow:inset 0 0 0 1px #b08a4a;\n}\n.dn-studio button.choice:focus-visible{outline:1px dotted #b08a4a; outline-offset:2px}\n.dn-studio .swatch{\n  height:20px; border-radius:3px;\n  box-shadow:inset 0 0 0 1px rgba(0,0,0,.35);\n}\n.dn-studio .slider{display:grid; gap:2px}\n.dn-studio .head{display:flex; justify-content:space-between; align-items:center}\n.dn-studio .label,\n.dn-studio .value{\n  font-family:var(--dsh-font-family-code, ui-monospace, monospace); font-size:10.5px;\n  letter-spacing:.14em; text-transform:uppercase;\n  color:rgba(241,230,207,.62); font-variant-numeric:tabular-nums;\n}\n.dn-studio .value{color:#f1e6cf; letter-spacing:.04em}\n.dn-studio input[type=\"range\"]{\n  -webkit-appearance:none; appearance:none;\n  width:100%; height:16px; margin:0; cursor:pointer; background:\n    linear-gradient(rgba(241,230,207,.62), rgba(241,230,207,.62)) 0 50% / 100% 1px no-repeat,\n    repeating-linear-gradient(90deg, rgba(241,230,207,.62) 0 1px, transparent 1px 10%) 0 50% / 100% 8px no-repeat;\n}\n.dn-studio input[type=\"range\"]::-webkit-slider-thumb{\n  -webkit-appearance:none; width:9px; height:16px; border-radius:2px;\n  border:1px solid #5e431c;\n  background:linear-gradient(90deg, #f3dca4, #b8904c 55%, #5e431c);\n  box-shadow:0 1px 3px rgba(0,0,0,.5);\n}\n.dn-studio input[type=\"range\"]:focus-visible{outline:1px dotted #b08a4a; outline-offset:3px}\n.dn-studio .switch{display:flex; justify-content:space-between; align-items:center}\n.dn-studio .toggle{\n  position:relative; width:36px; height:19px; flex:none;\n  border-radius:10px; border:1px solid rgba(176,138,74,.3);\n  background:transparent; cursor:pointer; padding:0;\n}\n.dn-studio .toggle::after{\n  content:\"\"; position:absolute; top:2px; left:2px;\n  width:13px; height:13px; border-radius:50%;\n  background:rgba(241,230,207,.62);\n  transition:transform 140ms ease;\n}\n.dn-studio .toggle[aria-checked=\"true\"]{border-color:#b08a4a; background:rgba(255,215,154,.12)}\n.dn-studio .toggle[aria-checked=\"true\"]::after{\n  transform:translateX(17px);\n  background:radial-gradient(circle at 35% 35%, #f3dca4, #b8904c 60%, #5e431c);\n}\n.dn-studio .note{\n  margin:0; font-size:12px; line-height:1.5;\n  color:rgba(241,230,207,.55);\n}\n.dn-studio .close{\n  position:absolute; top:10px; right:10px;\n  width:22px; height:22px; display:grid; place-items:center;\n  border:1px solid transparent; border-radius:5px;\n  background:transparent; color:rgba(241,230,207,.62);\n  font-size:15px; line-height:1; cursor:pointer;\n}\n.dn-studio .close:hover{color:#f1e6cf; border-color:rgba(176,138,74,.4)}\n\n/* 右下角那个把手：平时很淡，悬停才亮起来 */\n.dn-handle{\n  position:fixed; z-index:39; right:18px; bottom:16px;\n  display:flex; align-items:center; gap:7px;\n  padding:7px 11px;\n  border:1px solid rgba(176,138,74,.32); border-radius:8px;\n  background:rgba(22,16,12,.9); backdrop-filter:blur(12px);\n  color:rgba(241,230,207,.66);\n  font-family:var(--dsh-font-family-code, ui-monospace, monospace); font-size:10.5px;\n  letter-spacing:.16em; text-transform:uppercase;\n  cursor:pointer; opacity:.4;\n  transition:opacity 200ms ease;\n}\n.dn-handle:hover,.dn-handle:focus-visible{opacity:1}\n.dn-handle[aria-expanded=\"true\"]{opacity:0; pointer-events:none}\n.dn-handle:focus-visible{outline:1px dotted #b08a4a; outline-offset:2px}\n.dn-handle svg{width:13px; height:13px; fill:none; stroke:currentColor; stroke-width:1.3; stroke-linecap:round}\n\n@media (max-width:720px){\n  .dn-studio{left:14px; right:14px; width:auto; top:auto; bottom:62px; max-height:52%}\n}\n@media (prefers-reduced-motion:reduce){\n  .dn-quill,.dn-quill-sway,.dn-quill-shine,.dn-quill-glint{animation:none}\n  .dn-handle,.dn-studio .toggle::after{transition:none}\n}\n";
+const CSS_TEXT = "/* dsh-nocturne —— 纸的配色由 token 决定，材质由 canvas 决定。\n   这里只做两件事：把 DSH 的语义别名换成纸与墨；给两片 canvas 找位置。\n   颜色取自 Typewriter-Nocturne 的 papers.ts（MIT）。 */\n\nhtml, :root {\n  --dn-paper: #efdfbd;\n  --dn-ink: #2a2019;\n  --dn-ink-muted: #6b5f52;\n  --dn-room: #241a14;\n  --dn-room-edge: #070504;\n  --dn-gilt: #6f5420;\n  --dn-light-rgb: 255 210 154;\n  --dn-metal-lo: #5e431c;\n  --dn-metal-hi: #f3dca4;\n  --dn-metal: #b8904c;\n  /* 缮写室面板用到的字族：宿主不一定有，给出与样张一致的回落链 */\n  --font-ui: \"EB Garamond\", \"Iowan Old Style\", Palatino, Georgia, serif;\n  --font-display: \"Cormorant Garamond\", \"EB Garamond\", Georgia, serif;\n  --font-mono: var(--dsh-font-family-code, ui-monospace, monospace);\n\n  /* 配色 token 不写在这里：运行时由 applyTokens() 内联写入并带 !important。\n     写在这里会反过来压过内联更新，导致换纸只换画布、不换界面底色。 */\n\n  /* 字体：衬线正文，等宽复古代码。字体文件不随包分发，走系统栈回落。 */\n  --dsh-font-family-text: \"EB Garamond\", \"Iowan Old Style\", \"Palatino Linotype\", Palatino,\n    Georgia, \"Source Han Serif SC\", \"Songti SC\", \"Noto Serif CJK SC\", serif !important;\n  --dsh-font-family-code: \"Courier Prime\", \"IBM Plex Mono\", \"Courier New\",\n    \"DejaVu Sans Mono\", ui-monospace, monospace !important;\n}\n\n/* 整扇窗就是这张纸。没被画到的地方也必须落到纸色上——否则留给 `html` 的\n   默认底会把正文区露成黑洞（第一次装载测试就是这么翻车的）。 */\n/* 纸的底色挂在 --dn-sheet 上：接管配色时是纸色，只让位时是 transparent（宿主自己画）。 */\nhtml, body { background: var(--dn-sheet, transparent) !important; }\n\n/* 两片 canvas：直接挂在 body 下，不能包一层带 z-index 的容器——\n   那会给它们造一个隔离栈，multiply 就再也合不到页面上（实测见 docs/nocturne.md）。 */\ncanvas[data-dn=\"paper\"], canvas[data-dn=\"glow\"] {\n  position: fixed;\n  left: 0;\n  top: 0;\n  display: block;\n  pointer-events: none;\n  transform-origin: 0 0;\n}\ncanvas[data-dn=\"paper\"] {\n  mix-blend-mode: multiply;\n  z-index: 2147482000;\n}\ncanvas[data-dn=\"glow\"] {\n  mix-blend-mode: screen;\n  z-index: 2147482001;\n}\n\n/* 纸的四边压暗，给出\"一张纸\"的厚度；比 TN 的 #vignette 更贴边，\n   因为这里的纸是整扇窗。 */\nhtml::after {\n  content: \"\";\n  position: fixed;\n  inset: 0;\n  z-index: 2147482002;\n  pointer-events: none;\n  background: radial-gradient(ellipse 92% 88% at 50% 46%, transparent 52%, rgba(0, 0, 0, .42) 100%);\n}\n\n/* 缮写室是\"器物\"，不是纸上的字：它悬在纸光之上，不被灯压暗——\n   与上游一致，Studio 属于窗框而不属于纸面。 */\n.dn-studio { z-index: 2147483000; }\n.dn-handle { z-index: 2147482999; opacity: .55; }\n\n\n.dn-caret{\n  position:fixed; left:0; top:0; z-index: 2147481999;\n  display:none; pointer-events:none; will-change:transform;\n  --dn-ink-size:16px;\n  --dn-ink-weight:400;\n}\n.dn-ink-blot,\n.dn-ink-halo{\n  position:absolute; inset:7% 0.5px;\n  background:var(--dn-caret-ink, #3a2c20);\n}\n.dn-ink-blot{\n  border-radius:22% 14% 18% 12% / 12% 20% 10% 18%;\n  box-shadow:\n    inset 0 0 0 .5px rgba(0,0,0,.22),\n    inset 0 0 3px rgba(0,0,0,.28),\n    0 0 1.2px var(--dn-caret-ink, #3a2c20);\n  filter:blur(.3px);\n}\n.dn-ink-halo{\n  border-radius:40%;\n  opacity:0;\n  filter:blur(2.5px);\n}\n.dn-ink-glyph{\n  position:absolute; inset:0;\n  display:flex; align-items:center; justify-content:center;\n  color:var(--dsw-alias-bg-base, #efdfbd);\n  font-family:var(--dsh-font-family-code, ui-monospace, monospace);\n  font-size:var(--dn-ink-size);\n  font-weight:var(--dn-ink-weight);\n  line-height:1; white-space:pre;\n  font-variant-ligatures:none;\n}\n/* 失焦时墨退掉，只留一个淡淡的格子轮廓。 */\n.dn-caret[data-focused=\"false\"] .dn-ink-blot,\n.dn-caret[data-focused=\"false\"] .dn-ink-halo,\n.dn-caret[data-focused=\"false\"] .dn-ink-glyph{ display:none }\n.dn-caret[data-focused=\"false\"]::after{\n  content:\"\"; position:absolute; inset:7% .5px;\n  border:1px solid var(--dn-caret-ink, #3a2c20); border-radius:2px; opacity:.45;\n}\n.dn-caret[data-appearance=\"dark\"] .dn-ink-blot{\n  box-shadow:\n    inset 0 0 0 .5px rgba(255,255,255,.25),\n    inset 0 0 3px rgba(255,255,255,.3),\n    0 0 1.2px var(--dn-caret-ink, #3a2c20);\n}\n/* ── 羽毛笔光标：形状、渐变、摆动、光晕都照搬上游 .tn-quill ─────────────── */\n.dn-quill{\n  position:fixed; left:0; top:0; z-index:1;\n  display:none; pointer-events:none; will-change:transform;\n  --dn-quill-edge:#120e0c;\n  --dn-quill-body:#2b2420;\n  --dn-quill-sheen:#5f5753;\n  --dn-quill-barb:rgba(168,152,138,.42);\n  --dn-quill-rachis:#e4d8c0;\n  --dn-quill-down:rgba(70,60,54,.65);\n  filter:drop-shadow(.8px 1.6px 1px rgba(0,0,0,.3));\n  animation:dn-quill-breathe 1.2s ease-in-out infinite alternate;\n}\n.dn-quill[data-appearance=\"dark\"]{\n  --dn-quill-edge:#9d9485;\n  --dn-quill-body:#ebe4d6;\n  --dn-quill-sheen:#fffdf8;\n  --dn-quill-barb:rgba(140,128,108,.5);\n  --dn-quill-rachis:#fffdf6;\n  --dn-quill-down:rgba(236,229,216,.75);\n}\n.dn-quill svg{display:block; width:100%; height:100%; overflow:visible}\n.dn-quill-sway{transform-box:view-box; transform-origin:0 0; animation:dn-quill-sway 3.4s ease-in-out infinite alternate}\n.dn-quill-vane{fill:url(#dn-quill-vane)}\n.dn-quill-barbs{fill:none; stroke:var(--dn-quill-barb); stroke-width:.28; stroke-linecap:round}\n.dn-quill-rachis{fill:var(--dn-quill-rachis)}\n.dn-quill-rachis-light{fill:none; stroke:#fff; stroke-width:.22; opacity:.55}\n.dn-quill-down{fill:none; stroke:var(--dn-quill-down); stroke-width:.35; stroke-linecap:round}\n.dn-quill-engraving{fill:none; stroke:var(--dn-metal-lo); stroke-width:.3}\n.dn-quill-hole{fill:var(--dn-metal-lo)}\n.dn-quill-shine{fill:#fff; opacity:.2; animation:dn-quill-shine 2.8s ease-in-out infinite}\n.dn-quill-glint{fill:#fff; opacity:0; animation:dn-quill-glint 2.8s ease-in-out infinite}\n.dn-quill[data-focused=\"false\"]{opacity:.4; animation:none}\n.dn-quill[data-focused=\"false\"] .dn-quill-sway,\n.dn-quill[data-focused=\"false\"] .dn-quill-shine,\n.dn-quill[data-focused=\"false\"] .dn-quill-glint{animation:none}\n@keyframes dn-quill-breathe{from{opacity:1} to{opacity:.62}}\n@keyframes dn-quill-sway{from{transform:rotate(-1.6deg)} to{transform:rotate(1.6deg)}}\n@keyframes dn-quill-shine{0%{transform:translateY(0)} 100%{transform:translateY(-46px)}}\n@keyframes dn-quill-glint{\n  0%,72%{opacity:0}\n  80%{opacity:.9}\n  88%{opacity:.15}\n  100%{opacity:0}\n}\n\n/* ── 缮写室 Studio：一张悬在桌上的深色玻璃面板 ─────────────────────────── */\n.dn-studio{\n  position:fixed; z-index:40; top:52px; right:18px;\n  width:296px; max-height:calc(100% - 88px); overflow-y:auto;\n  padding:16px 18px 18px;\n  border:1px solid rgba(176,138,74,.35);\n  border-radius:12px;\n  background:rgba(22,16,12,.9);\n  backdrop-filter:blur(12px);\n  box-shadow:0 24px 60px -20px rgba(0,0,0,.8);\n  color:#f1e6cf;\n  font-family:var(--font-ui);\n  display:none;\n}\n.dn-studio[data-open=\"true\"]{display:block}\n.dn-studio .eyebrow{\n  font-variant:small-caps; letter-spacing:.2em; font-size:11px;\n  color:rgba(241,230,207,.62);\n}\n.dn-studio h2{\n  margin:0 0 10px;\n  font-family:var(--font-display); font-style:italic; font-weight:500;\n  font-size:23px; line-height:1.2; text-wrap:balance;\n}\n.dn-studio .group{\n  margin-top:13px; padding-top:11px;\n  border-top:1px solid rgba(176,138,74,.28);\n  display:grid; gap:9px;\n}\n.dn-studio .group h3{\n  margin:0; font-weight:500; font-style:italic; font-size:16px;\n}\n.dn-studio .grid{display:grid; grid-template-columns:repeat(3, 1fr); gap:5px}\n.dn-studio .grid.two{grid-template-columns:repeat(2, 1fr)}\n.dn-studio button.choice{\n  padding:5px 4px 6px;\n  border:1px solid rgba(176,138,74,.3); border-radius:6px;\n  background:transparent; color:#f1e6cf;\n  font-family:var(--font-ui); font-size:12.5px; line-height:1.2;\n  cursor:pointer; display:grid; gap:4px; justify-items:stretch;\n}\n.dn-studio button.choice[aria-pressed=\"true\"]{\n  border-color:#b08a4a;\n  box-shadow:inset 0 0 0 1px #b08a4a;\n}\n.dn-studio button.choice:focus-visible{outline:1px dotted #b08a4a; outline-offset:2px}\n.dn-studio .swatch{\n  height:20px; border-radius:3px;\n  box-shadow:inset 0 0 0 1px rgba(0,0,0,.35);\n}\n.dn-studio .slider{display:grid; gap:2px}\n.dn-studio .head{display:flex; justify-content:space-between; align-items:center}\n.dn-studio .label,\n.dn-studio .value{\n  font-family:var(--dsh-font-family-code, ui-monospace, monospace); font-size:10.5px;\n  letter-spacing:.14em; text-transform:uppercase;\n  color:rgba(241,230,207,.62); font-variant-numeric:tabular-nums;\n}\n.dn-studio .value{color:#f1e6cf; letter-spacing:.04em}\n.dn-studio input[type=\"range\"]{\n  -webkit-appearance:none; appearance:none;\n  width:100%; height:16px; margin:0; cursor:pointer; background:\n    linear-gradient(rgba(241,230,207,.62), rgba(241,230,207,.62)) 0 50% / 100% 1px no-repeat,\n    repeating-linear-gradient(90deg, rgba(241,230,207,.62) 0 1px, transparent 1px 10%) 0 50% / 100% 8px no-repeat;\n}\n.dn-studio input[type=\"range\"]::-webkit-slider-thumb{\n  -webkit-appearance:none; width:9px; height:16px; border-radius:2px;\n  border:1px solid #5e431c;\n  background:linear-gradient(90deg, #f3dca4, #b8904c 55%, #5e431c);\n  box-shadow:0 1px 3px rgba(0,0,0,.5);\n}\n.dn-studio input[type=\"range\"]:focus-visible{outline:1px dotted #b08a4a; outline-offset:3px}\n.dn-studio .switch{display:flex; justify-content:space-between; align-items:center}\n.dn-studio .toggle{\n  position:relative; width:36px; height:19px; flex:none;\n  border-radius:10px; border:1px solid rgba(176,138,74,.3);\n  background:transparent; cursor:pointer; padding:0;\n}\n.dn-studio .toggle::after{\n  content:\"\"; position:absolute; top:2px; left:2px;\n  width:13px; height:13px; border-radius:50%;\n  background:rgba(241,230,207,.62);\n  transition:transform 140ms ease;\n}\n.dn-studio .toggle[aria-checked=\"true\"]{border-color:#b08a4a; background:rgba(255,215,154,.12)}\n.dn-studio .toggle[aria-checked=\"true\"]::after{\n  transform:translateX(17px);\n  background:radial-gradient(circle at 35% 35%, #f3dca4, #b8904c 60%, #5e431c);\n}\n.dn-studio button.reset{\n  width:100%; padding:6px 8px;\n  border:1px solid rgba(176,138,74,.45); border-radius:6px;\n  background:rgba(255,215,154,.1); color:#f3dca4;\n  font-family:var(--font-ui); font-size:13px; cursor:pointer;\n}\n.dn-studio button.reset:hover{background:rgba(255,215,154,.18)}\n.dn-studio button.reset:focus-visible{outline:1px dotted #b08a4a; outline-offset:2px}\n.dn-studio .note{\n  margin:0; font-size:12px; line-height:1.5;\n  color:rgba(241,230,207,.55);\n}\n.dn-studio .close{\n  position:absolute; top:10px; right:10px;\n  width:22px; height:22px; display:grid; place-items:center;\n  border:1px solid transparent; border-radius:5px;\n  background:transparent; color:rgba(241,230,207,.62);\n  font-size:15px; line-height:1; cursor:pointer;\n}\n.dn-studio .close:hover{color:#f1e6cf; border-color:rgba(176,138,74,.4)}\n\n/* 右下角那个把手：平时很淡，悬停才亮起来 */\n.dn-handle{\n  position:fixed; z-index:39; right:18px; bottom:16px;\n  display:flex; align-items:center; gap:7px;\n  padding:7px 11px;\n  border:1px solid rgba(176,138,74,.32); border-radius:8px;\n  background:rgba(22,16,12,.9); backdrop-filter:blur(12px);\n  color:rgba(241,230,207,.66);\n  font-family:var(--dsh-font-family-code, ui-monospace, monospace); font-size:10.5px;\n  letter-spacing:.16em; text-transform:uppercase;\n  cursor:pointer; opacity:.4;\n  transition:opacity 200ms ease;\n}\n.dn-handle:hover,.dn-handle:focus-visible{opacity:1}\n.dn-handle[aria-expanded=\"true\"]{opacity:0; pointer-events:none}\n.dn-handle:focus-visible{outline:1px dotted #b08a4a; outline-offset:2px}\n.dn-handle svg{width:13px; height:13px; fill:none; stroke:currentColor; stroke-width:1.3; stroke-linecap:round}\n\n@media (max-width:720px){\n  .dn-studio{left:14px; right:14px; width:auto; top:auto; bottom:62px; max-height:52%}\n}\n@media (prefers-reduced-motion:reduce){\n  .dn-quill,.dn-quill-sway,.dn-quill-shine,.dn-quill-glint{animation:none}\n  .dn-handle,.dn-studio .toggle::after{transition:none}\n}\n";
 
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -1359,7 +1371,7 @@ const SETTING_KEYS = ['paper', 'theme', 'lamp', 'enabled', 'intensity', 'spread'
 const TOKEN_NAMES = ['--dsw-alias-bg-base', '--dsw-alias-bg-module-platform', '--dsw-alias-bg-layer-1',
   '--dsw-alias-bg-layer-2', '--dsw-alias-label-primary', '--dsw-alias-label-secondary',
   '--dsw-alias-label-tertiary', '--dn-paper', '--dn-ink', '--dn-caret-ink', '--dn-light-rgb',
-  '--dn-metal-lo', '--dn-metal-hi', '--dn-metal'];
+  '--dn-metal-lo', '--dn-metal-hi', '--dn-metal', '--dn-sheet'];
 let remoteTimer = 0;
 let lastDiag = null;
 const measure = document.createElement('canvas').getContext('2d');
@@ -1499,35 +1511,61 @@ function tokenMode() {
   return foreignSkin() ? 'material' : 'full';
 }
 
-function applyTokens() {
-  const p = paper();
+/**
+ * 纸色做成一张 token 表，运行时内联写入并且带 !important。
+ *
+ * 为什么不能靠样式表：样式表里的 !important 会压过内联的普通声明。
+ * 早先那版把默认值写在 style.css 里、运行时用内联去改，结果换纸只换了画布，
+ * 界面底色一直停在默认那张纸上——这条是桌面版自检抓到的（bgBase 与 dnPaper 不一致）。
+ * 现在样式表只管 canvas / 光标 / 面板这些不会变的东西，配色一律运行时写。
+ */
+function tokenMap(p) {
   const dark = p.appearance === 'dark';
-  const root = document.documentElement.style;
-  // 「只叠材质」：不碰宿主的配色 token，只留纸与灯——这样两套皮肤可以叠着用。
-  if (tokenMode() === 'material') {
-    root.setProperty('--dn-paper', p.paper);
-    root.setProperty('--dn-ink', p.ink);
-    root.setProperty('--dn-caret-ink', p.cursor);
-    root.setProperty('--dn-metal-lo', '#5e431c');
-    root.setProperty('--dn-metal-hi', '#f3dca4');
-    root.setProperty('--dn-metal', '#b8904c');
-    return;
-  }
-  root.setProperty('--dsw-alias-bg-base', p.paper);
-  root.setProperty('--dsw-alias-bg-module-platform', p.paper);
-  root.setProperty('--dsw-alias-bg-layer-1', dark ? '#242028' : '#eadcb9');
-  root.setProperty('--dsw-alias-bg-layer-2', dark ? '#1a171d' : '#e6d5b0');
-  root.setProperty('--dsw-alias-label-primary', p.ink);
-  root.setProperty('--dsw-alias-label-secondary', p.inkMuted);
-  root.setProperty('--dn-paper', p.paper);
-  root.setProperty('--dn-ink', p.ink);
-  root.setProperty('--dn-caret-ink', p.cursor);
-  host_cursor(p);
+  return {
+    '--dsw-alias-bg-base': p.paper,
+    '--dsw-alias-bg-module-platform': p.paper,
+    '--dsw-alias-bg-layer-1': dark ? '#242028' : '#eadcb9',
+    '--dsw-alias-bg-layer-2': dark ? '#1a171d' : '#e6d5b0',
+    '--dsw-alias-label-primary': p.ink,
+    '--dsw-alias-label-secondary': p.inkMuted,
+    '--dsw-alias-label-tertiary': dark ? '#8f89a6' : '#7d7264',
+    '--dn-paper': p.paper,
+    '--dn-ink': p.ink,
+    '--dn-caret-ink': p.cursor,
+    '--dn-metal-lo': '#5e431c',
+    '--dn-metal-hi': '#f3dca4',
+    '--dn-metal': '#b8904c',
+    // 纸的底色：整窗背景挂在它上面，卸载/让位时一并还原
+    '--dn-sheet': p.paper
+  };
 }
 
-function host_cursor(p) {
+function clearTokens() {
+  for (const name of TOKEN_NAMES) document.documentElement.style.removeProperty(name);
+}
+
+function applyTokens() {
+  // 「只叠材质」：一个宿主配色 token 都不碰，只留纸与灯——两套皮肤可以叠着用。
+  if (tokenMode() === 'material') {
+    clearTokens();
+    const p = paper();
+    const root = document.documentElement.style;
+    root.setProperty('--dn-sheet', 'transparent');
+    for (const name of ['--dn-paper', '--dn-ink', '--dn-caret-ink', '--dn-metal-lo', '--dn-metal-hi', '--dn-metal']) {
+      root.setProperty(name, {
+        '--dn-paper': p.paper,
+        '--dn-ink': p.ink,
+        '--dn-caret-ink': p.cursor,
+        '--dn-metal-lo': '#5e431c',
+        '--dn-metal-hi': '#f3dca4',
+        '--dn-metal': '#b8904c'
+      }[name]);
+    }
+    return;
+  }
   const root = document.documentElement.style;
-  root.setProperty('--dsw-alias-label-tertiary', p.appearance === 'dark' ? '#8f89a6' : '#7d7264');
+  const map = tokenMap(paper());
+  for (const name of Object.keys(map)) root.setProperty(name, map[name], 'important');
 }
 
 function injectStyle() {
@@ -1605,6 +1643,10 @@ function mount() {
       paperLight.render(rig, paper(), animateGrain ? time : 0);
       needsLight = false;
       lastLightAt = now;
+      if (diagPending) {
+        diagPending = false;
+        reportDiag();
+      }
     }
 
     const lightChannels = toUnit(theme().light.color).map((c) => Math.round(c * 255));
@@ -1662,8 +1704,41 @@ function mount() {
   frameId = requestAnimationFrame(frame);
 
   // 跑起来 2 秒后报一次自检：WebGL 起没起来、纸画出来没有、token 实际是什么。
-  setTimeout(() => {
-    if (stopped) return;
+  // 像素采样必须在 drawArrays 之后立刻做（默认不保留绘制缓冲），所以由帧循环触发。
+  let diagPending = false;
+  setTimeout(() => { diagPending = true; }, 2000);
+
+  /** 从真实帧缓冲里按网格取样，算纸面的亮度分布——这是"画出来了没有"的硬证据。 */
+  function samplePaper() {
+    try {
+      const gl = paperCanvas.getContext('webgl2');
+      if (!gl || gl.isContextLost()) return null;
+      const w = paperCanvas.width;
+      const h = paperCanvas.height;
+      const cols = 28;
+      const rows = 16;
+      const pixel = new Uint8Array(4);
+      const values = [];
+      for (let row = 0; row < rows; row++) {
+        for (let col = 0; col < cols; col++) {
+          const x = Math.min(w - 1, Math.round(((col + 0.5) / cols) * w));
+          const y = Math.min(h - 1, Math.round(((row + 0.5) / rows) * h));
+          gl.readPixels(x, y, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, pixel);
+          values.push(0.2126 * pixel[0] + 0.7152 * pixel[1] + 0.0722 * pixel[2]);
+        }
+      }
+      values.sort((m, n) => m - n);
+      const at = (q) => Math.round(values[Math.min(values.length - 1, Math.floor(q * values.length))]);
+      return {
+        mean: Math.round(values.reduce((s, v) => s + v, 0) / values.length),
+        p05: at(0.05), p50: at(0.5), p95: at(0.95), max: Math.round(values[values.length - 1])
+      };
+    } catch (error) {
+      return null;
+    }
+  }
+
+  function reportDiag() {
     let renderer = '';
     let webgl2 = false;
     try {
@@ -1689,10 +1764,12 @@ function mount() {
       canvases: document.querySelectorAll('canvas[' + PAPER_ATTR + ']').length,
       caret: caret.shown ? caret.mode : 'hidden',
       papers: Object.keys(PAPERS).length,
-      themes: Object.keys(THEMES).length
+      themes: Object.keys(THEMES).length,
+      // 与标定基准同口径：上游参考值 p50≈115 / p95≈178（1440×900、parchment、balanced 灯）
+      paperPixels: samplePaper()
     };
     persist();
-  }, 2000);
+  }
 
   // 缮写室：与样张同一份 builder，所以两处的面板不会长歪。
   const studio = buildStudio({
@@ -1700,6 +1777,17 @@ function mount() {
     foreign: foreignSkin,
     resolvedCoexist: tokenMode,
     onChange(key, value) {
+      if (key === 'preset') {
+        // 标定值：与样张同一份 NOCTURNE_DEFAULTS，两边不会各有一组"默认"。
+        Object.assign(SETTINGS, JSON.parse(JSON.stringify(NOCTURNE_DEFAULTS)));
+        caret.setMode(SETTINGS.cursorMode);
+        applyTokens();
+        studio.sync();
+        persist();
+        needsBuild = true;
+        reposition();
+        return;
+      }
       if (key === 'coexist') {
         SETTINGS.coexist = value;
         studio.sync();
