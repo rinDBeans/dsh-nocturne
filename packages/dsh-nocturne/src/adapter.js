@@ -12,12 +12,12 @@ const STORE_VERSION = 1;
 const REMOTE_PATH = '/dsh-nocturne/settings';
 const SETTING_KEYS = ['paper', 'theme', 'lamp', 'enabled', 'intensity', 'spread', 'beam', 'aim',
   'reach', 'softness', 'grain', 'cursorGlow', 'paperIllumination', 'particles', 'texture',
-  'cursorMode', 'coexist', 'selectionStyle', 'selectionWash', 'selectionAlpha'];
+  'cursorMode', 'coexist'];
 /** 会被本插件改写、卸载时必须逐项还原的 token。 */
 const TOKEN_NAMES = ['--dsw-alias-bg-base', '--dsw-alias-bg-module-platform', '--dsw-alias-bg-layer-1',
   '--dsw-alias-bg-layer-2', '--dsw-alias-label-primary', '--dsw-alias-label-secondary',
   '--dsw-alias-label-tertiary', '--dn-paper', '--dn-ink', '--dn-caret-ink', '--dn-light-rgb',
-  '--dn-metal-lo', '--dn-metal-hi', '--dn-metal', '--dn-sheet', '--dn-wash'];
+  '--dn-metal-lo', '--dn-metal-hi', '--dn-metal', '--dn-sheet'];
 let remoteTimer = 0;
 let lastDiag = null;
 /** 卡顿记录：只留最后 12 条，随设置文档一起落盘，用来在拿不到界面时定位卡死。 */
@@ -46,8 +46,6 @@ function normalize() {
   if (!THEMES[SETTINGS.theme]) SETTINGS.theme = 'paper-and-ink';
   if (['ink', 'quill', 'none'].indexOf(SETTINGS.cursorMode) < 0) SETTINGS.cursorMode = 'ink';
   if (['auto', 'material', 'full'].indexOf(SETTINGS.coexist) < 0) SETTINGS.coexist = 'auto';
-  if (['ink', 'classic'].indexOf(SETTINGS.selectionStyle) < 0) SETTINGS.selectionStyle = 'ink';
-  SETTINGS.selectionAlpha = Math.min(1.5, Math.max(0, Number(SETTINGS.selectionAlpha) || 1));
   const bar = SETTINGS.scrollbar;
   if (['clip', 'bar', 'native'].indexOf(bar.style) < 0) bar.style = 'clip';
   if (!CLIP_FINISHES[bar.finish]) bar.finish = 'silver';
@@ -196,8 +194,7 @@ function tokenMap(p) {
     '--dn-metal': '#b8904c',
     // 纸的底色：整窗背景挂在它上面，卸载/让位时一并还原
     '--dn-sheet': p.paper,
-    // 选区的洗色：classic 口径直接用它，墨水口径画布也用同一份，两处不会走样
-    '--dn-wash': washColor()
+
   };
 }
 
@@ -212,7 +209,6 @@ function applyTokens() {
     const p = paper();
     const root = document.documentElement.style;
     root.setProperty('--dn-sheet', 'transparent');
-    root.setProperty('--dn-wash', washColor());
     for (const name of ['--dn-paper', '--dn-ink', '--dn-caret-ink', '--dn-metal-lo', '--dn-metal-hi', '--dn-metal']) {
       root.setProperty(name, {
         '--dn-paper': p.paper,
@@ -259,11 +255,7 @@ function mount() {
   const caret = new InkCaret();
   caret.mount(paperCanvas);
 
-  // 选区画在纸光之下（所以灯会把选区一起照亮），纸夹压在纸光之上（它是一件器物）。
-  const selectionInk = new SelectionInk();
-  // z-index 与羽毛笔一样只取 1：实测把选区画布推到 2×10^9 那一档，Chromium 会把它
-  // 排出混合组（洋红整块消失）。见 docs/nocturne.md §4.11。
-  selectionInk.mount({zIndex: 1, before: paperCanvas});
+  // 纸夹压在纸光之上：它是一件器物，不该被灯压暗。
   const scrollClip = new ScrollClip();
   scrollClip.mount({zIndex: 2147482003});
 
@@ -296,7 +288,6 @@ function mount() {
       needsBuild = false;
       needsLight = true;
       rebuiltThisFrame = true;
-      selectionInk.resize();
     }
     scrollClip.needLayout = true;
   }
@@ -360,8 +351,7 @@ function mount() {
     lastCaretPoint = caretPoint ? {x: caretPoint.x, y: caretPoint.y} : null;
     cursorMovedThisFrame = false;
 
-    // 选区与纸夹：两者都自带脏标记，静止时只花一次比较。
-    selectionInk.sync(now);
+    // 纸夹自带脏标记：静止时只花一次比较。
     scrollClip.step(now);
 
     // 根元素的 custom property 一改，整篇文档的样式都要重算——只在真的变了才写。
@@ -403,10 +393,7 @@ function mount() {
   const observer = new ResizeObserver(reposition);
   observer.observe(document.documentElement);
 
-  const onSelection = () => {
-    needsLight = true;
-    selectionInk.mark();
-  };
+  const onSelection = () => { needsLight = true; };
   // 页面看不见时停掉循环：一张一直重算的纸，在后台没人看，白烧电。
   const onVisibility = () => {
     if (document.hidden) {
@@ -494,9 +481,6 @@ function mount() {
       dnPaper: getComputedStyle(document.documentElement).getPropertyValue('--dn-paper').trim(),
       canvases: document.querySelectorAll('canvas[' + PAPER_ATTR + ']').length,
       caret: caret.shown ? caret.mode : 'hidden',
-      // 选区与纸夹的实际状态：桌面版拿不到控制台，这两项只能靠落盘自检来验。
-      selection: selectionInk.mode,
-      selectionCells: selectionInk.cells.length,
       scroll: {
         style: SETTINGS.scrollbar.style,
         attached: Boolean(scrollClip.target),
@@ -527,7 +511,6 @@ function mount() {
         // 标定值：与样张同一份 NOCTURNE_DEFAULTS，两边不会各有一组"默认"。
         Object.assign(SETTINGS, JSON.parse(JSON.stringify(NOCTURNE_DEFAULTS)));
         caret.setMode(SETTINGS.cursorMode);
-        selectionInk.setMode(SETTINGS.selectionStyle);
         scrollClip.apply();
         applyTokens();
         studio.sync();
@@ -545,7 +528,6 @@ function mount() {
       if (key === 'paper') {
         SETTINGS.paper = value;
         applyTokens();
-        selectionInk.setMode(SETTINGS.selectionStyle);
         needsBuild = true;
         caret.hide();
         studio.sync();
@@ -555,8 +537,6 @@ function mount() {
       }
       if (key === 'theme') {
         SETTINGS.theme = value;
-        // 洗色取自主题，换房就得重新写一遍 token。
-        applyTokens();
         needsBuild = true;
         studio.sync();
         persist();
@@ -573,20 +553,6 @@ function mount() {
       if (key === 'lamp') {
         SETTINGS.lamp = value;
         needsLight = true;
-        persist();
-        return;
-      }
-      if (key === 'selectionStyle') {
-        SETTINGS.selectionStyle = value;
-        selectionInk.setMode(value);
-        studio.sync();
-        persist();
-        return;
-      }
-      if (key === 'selectionAlpha') {
-        SETTINGS.selectionAlpha = value;
-        applyTokens();
-        studio.sync();
         persist();
         return;
       }
@@ -612,7 +578,6 @@ function mount() {
   document.body.appendChild(studio.element);
   document.body.appendChild(studio.handle);
   caret.setMode(SETTINGS.cursorMode);
-  selectionInk.setMode(SETTINGS.selectionStyle);
   scrollClip.apply();
   applyTokens();
 
@@ -620,7 +585,6 @@ function mount() {
   loadRemote().then((loaded) => {
     if (!loaded || stopped) return;
     caret.setMode(SETTINGS.cursorMode);
-    selectionInk.setMode(SETTINGS.selectionStyle);
     scrollClip.apply();
     applyTokens();
     studio.sync();
@@ -649,14 +613,6 @@ function mount() {
     lamp(on) { SETTINGS.lamp = on !== false; persist(); needsLight = true; },
     /** 关掉墨迹光标：宿主自己的光标立刻回来（caret-color 会被还原）。 */
     caret(on) { caret.enabled = on !== false; if (!caret.enabled) caret.hide(); return caret.enabled; },
-    /** 选区口径：'ink' 墨水溶解 / 'classic' 平涂高亮。 */
-    select(mode) {
-      SETTINGS.selectionStyle = mode === 'classic' ? 'classic' : 'ink';
-      selectionInk.setMode(SETTINGS.selectionStyle);
-      studio.sync();
-      persist();
-      return SETTINGS.selectionStyle;
-    },
     /** 滚条形态：'clip' 纸夹 / 'bar' 细杆 / 'native' 原生。 */
     scroll(style) {
       SETTINGS.scrollbar.style = ['clip', 'bar', 'native'].indexOf(style) < 0 ? 'clip' : style;
@@ -668,20 +624,8 @@ function mount() {
     /** 选区与纸夹的实时状态：桌面版没有控制台，这是唯一能问的地方。 */
     state() {
       return {
-        selection: selectionInk.mode,
-        cells: selectionInk.cells.length,
-        wash: selectionInk.wash.length,
-        live: selectionInk.live,
         clip: scrollClip.element ? scrollClip.element.style.transform : null,
-        target: scrollClip.target ? String(scrollClip.target.className).slice(0, 40) : null,
-        ink: selectionInk.inkEls.length,
-        first: selectionInk.inkEls[0]
-          ? {
-            char: selectionInk.inkEls[0].el.textContent.slice(-1),
-            at: selectionInk.inkEls[0].el.style.left + ',' + selectionInk.inkEls[0].el.style.top
-          }
-          : null,
-        layer: selectionInk.layer ? getComputedStyle(selectionInk.layer).zIndex : null
+        target: scrollClip.target ? String(scrollClip.target.className).slice(0, 40) : null
       };
     },
     /** 纸上有什么在滚动：查不到滚动容器时用它诊断。 */
@@ -714,7 +658,6 @@ function mount() {
     paperCanvas.removeEventListener('webglcontextlost', onContextLost);
     paperCanvas.removeEventListener('webglcontextrestored', onContextRestored);
     caret.destroy();
-    selectionInk.destroy();
     scrollClip.destroy();
     paperLight.release();
     glow.clear();

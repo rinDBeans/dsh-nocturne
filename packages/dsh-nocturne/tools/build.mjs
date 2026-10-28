@@ -38,13 +38,10 @@ const caretCss = caretMatch[1]
   .replaceAll('var(--paper)', 'var(--dsw-alias-bg-base, #efdfbd)')
   .replaceAll('var(--font-mono)', 'var(--dsh-font-family-code, ui-monospace, monospace)');
 
-// 选区与纸夹的样式同样只在样张里维护一份，抽过来时把 --wash 换成插件自己的变量名
-// ——宿主那边没有 --selection 这些变量。
+// 纸夹的样式同样只在样张里维护一份，抽过来时把样张的变量名换成插件自己的。
 const sharedMatch = html.match(/\/\*>>> shared-css \*\/([\s\S]*?)\/\*<<< shared-css \*\//);
 if (!sharedMatch) throw new Error('样张里的 shared-css 标记变了');
 const sharedCss = sharedMatch[1]
-  .replaceAll('var(--wash)', 'var(--dn-wash, rgba(52, 64, 112, .2))')
-  .replaceAll('var(--sel-paper)', 'var(--dn-paper, #efdfbd)')
   .replaceAll('var(--gilt)', 'var(--dn-metal, #b8904c)');
 
 const cssLiteral = 'const CSS_TEXT = ' + JSON.stringify(css + '\n' + caretCss + '\n' + sharedCss) + ';';

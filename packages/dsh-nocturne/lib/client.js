@@ -4,8 +4,8 @@
  * 纸、灯、辉光三层的渲染代码由 tools/build.mjs 从 sample/nocturne-desk.html 抽取；
  * 上游配方来自 Chaosnap/Typewriter-Nocturne（MIT），随包保留其版权行。
  *
- *   核心 2171 行 · 适配 755 行 · 样式 70 行
- *   样张 sample/nocturne-desk.html（135967 bytes）
+ *   核心 1819 行 · 适配 698 行 · 样式 70 行
+ *   样张 sample/nocturne-desk.html（117999 bytes）
  */
 window.__ModuleLoader__.load({
   id: 'dsh-nocturne',
@@ -100,10 +100,6 @@ const SETTINGS = {
   coexist:'auto',
   // 滚条：上游三形态（纸夹 / 细杆 / 原生），纸夹另有四种金属
   scrollbar:{style:'clip', finish:'silver', barWidth:6, barOpacity:.45},
-  // 选区：ink = 墨水溶解（逐字化开）；classic = 平涂高亮
-  selectionStyle:'ink',
-  selectionWash:'',
-  selectionAlpha:1,
   // 窗光自成一组：上游的 Studio 里窗格数、斜度、柔边都是独立参数，
   // 不能借台灯的 softness（借了就是一团糊，达不到截图里那种 3×2 的方窗）。
   window:{x:.5, y:.5, columns:3, rows:2, softness:.15, slant:0}
@@ -1206,10 +1202,6 @@ const STUDIO_CURSORS = [
   {id: 'quill', name: '羽毛'},
   {id: 'none', name: '原生'}
 ];
-const STUDIO_SELECTIONS = [
-  {id: 'ink', name: '墨水溶解'},
-  {id: 'classic', name: '平涂高亮'}
-];
 const STUDIO_SCROLL = [
   {id: 'clip', name: '纸夹'},
   {id: 'bar', name: '细杆'},
@@ -1251,8 +1243,6 @@ function buildStudio(options) {
     + '<button class="toggle" type="button" role="switch" aria-checked="true" aria-label="台灯"></button></div></div>');
   part.push('<div class="group" data-group="sliders"></div>');
   part.push('<div class="group"><h3>光标</h3><div class="grid" data-group="cursor"></div></div>');
-  part.push('<div class="group"><h3>选区</h3><div class="grid two" data-group="selection"></div>'
-    + '<div data-group="selection-slider"></div></div>');
   part.push('<div class="group"><h3>滚条</h3><div class="grid" data-group="scroll"></div>'
     + '<div class="grid" data-group="finish" hidden></div>'
     + '<div data-group="bar-slider" hidden></div>'
@@ -1299,9 +1289,6 @@ function buildStudio(options) {
   for (const item of STUDIO_COEXIST) {
     groupOf('coexist').appendChild(choiceButton(item.id, item.name, null));
   }
-  for (const item of STUDIO_SELECTIONS) {
-    groupOf('selection').appendChild(choiceButton(item.id, item.name, null));
-  }
   for (const item of STUDIO_SCROLL) {
     groupOf('scroll').appendChild(choiceButton(item.id, item.name, null));
   }
@@ -1343,10 +1330,6 @@ function buildStudio(options) {
     });
   }
 
-  miniSlider(groupOf('selection-slider'), {
-    key: 'selectionAlpha', label: '洗色浓度', min: 0, max: 1.5, step: 0.05,
-    format: (v) => Math.round(v * 100) + '%', value: () => state.selectionAlpha
-  });
   miniSlider(groupOf('bar-slider'), {
     key: 'scrollBarWidth', label: '杆宽', min: 3, max: 14, step: 1,
     format: (v) => Math.round(v) + 'px', value: () => state.scrollbar.barWidth
@@ -1406,7 +1389,7 @@ function buildStudio(options) {
   // 组名不等于设置键：光标那组叫 cursor，设置里叫 cursorMode。
   const KEY_OF = {
     theme: 'theme', paper: 'paper', cursor: 'cursor', coexist: 'coexist',
-    selection: 'selectionStyle', scroll: 'scrollStyle', finish: 'scrollFinish'
+    scroll: 'scrollStyle', finish: 'scrollFinish'
   };
   root.addEventListener('click', (event) => {
     const button = event.target.closest('button.choice');
@@ -1437,7 +1420,6 @@ function buildStudio(options) {
     mark('paper', state.paper);
     mark('cursor', state.cursorMode);
     mark('coexist', state.coexist);
-    mark('selection', state.selectionStyle);
     mark('scroll', state.scrollbar.style);
     mark('finish', state.scrollbar.finish);
     // 金属只在"纸夹"下有意义，杆宽只在"细杆"下有意义——没有的项不显示。
@@ -1467,340 +1449,6 @@ function buildStudio(options) {
   sync();
 
   return {element: root, handle, sync};
-}
-
-/* ═══════════════════════════════════════════════════════════════════════════
-   5.8 · 选区：墨滴化开
-   上游（lib/nocturne/typewriter/selection-layer.ts）画的是终端里一格格字符。
-   这里的字在 DOM 里，所以同一套曲线要换一种量法：用 Range 逐字取矩形、用元素的
-   计算样式取墨色，再按"盖纸 → 散开 → 聚拢"三段，画在纸光之下——灯把选区和正文
-   一起照亮，这也正是上游把选区画在纸层之下的原因。
-
-   三个数字照搬上游：溶解 680ms、逐字错峰 7ms（封顶 320ms）、超过 900 格只给洗色。
-   ═══════════════════════════════════════════════════════════════════════ */
-const SELECT_DISSOLVE_MS = 680;
-const SELECT_STAGGER_MS = 7;
-const SELECT_MAX_STAGGER_MS = 320;
-const SELECT_MAX_ANIMATED = 900;
-const SELECT_MAX_BLURRED = 260;
-/** 一次选区变化最多量这么多个字：拖得比量得快时，宁可只给洗色，也不按住主线程。 */
-const SELECT_MEASURE_BUDGET = 96;
-/** 一次最多走这么多个文本节点：把最坏情况按住（长会话里那棵树是上万节点）。 */
-const SELECT_NODE_BUDGET = 600;
-
-const selectEase = (t) => {
-  const x = clamp(t, 0, 1);
-  return x * x * (3 - 2 * x);
-};
-
-/** 洗色 = 主题的选色 × 浓度。只改 rgba 最后那个 alpha，色相留给上游。 */
-function washColor() {
-  const source = SETTINGS.selectionWash || (theme() && theme().selection) || paper().selection;
-  const alpha = clamp(SETTINGS.selectionAlpha == null ? 1 : SETTINGS.selectionAlpha, 0, 1.5);
-  const match = /^rgba?\(([^)]+)\)$/.exec(String(source).trim());
-  if (!match) return source;
-  const parts = match[1].split(',').map((v) => v.trim());
-  if (parts.length < 3) return source;
-  const base = parts[3] === undefined ? 1 : Number(parts[3]);
-  return 'rgba(' + parts[0] + ', ' + parts[1] + ', ' + parts[2] + ', '
-    + clamp(base * alpha, 0, 1).toFixed(3) + ')';
-}
-
-/** 选区边界：用来算出"这次新进来的是哪一段"。 */
-function boundaryOf(range) {
-  return {
-    startNode: range.startContainer, startOffset: range.startOffset,
-    endNode: range.endContainer, endOffset: range.endOffset
-  };
-}
-
-class SelectionInk {
-  constructor() {
-    this.layer = null;
-    this.mode = 'ink';
-    this.live = false;
-    this.dirty = false;
-    this.prev = null;
-    this.wash = [];
-    this.washEls = [];
-    this.inkEls = [];
-    this.cells = [];
-    this.washKey = 'off';
-    this.timers = [];
-    /** 同一格只留一个：两次选区变化落在同一格时，旧的要先撤掉，否则会重复叠字。 */
-    this.byCell = new Map();
-    this.range = typeof Range === 'function' ? document.createRange() : null;
-  }
-
-  /**
-   * 挂载。用 DOM 而不是 canvas，是被实测逼出来的：
-   * 一块 2D 画布摆在带 mix-blend-mode 的纸层旁边时不参与合成（画布自己画满了、
-   * 取样也是对的，屏幕上就是没有），换成 DOM 元素一切正常。顺带还白捡一个好处：
-   * 动画交给合成器跑，拖动时主线程不用再多一份逐帧绘制的负担。
-   */
-  mount(options) {
-    const option = options || {};
-    const layer = document.createElement('div');
-    layer.className = 'dn-select';
-    layer.setAttribute('aria-hidden', 'true');
-    layer.style.zIndex = String(option.zIndex == null ? 1 : option.zIndex);
-    if (option.before && option.before.parentNode) {
-      option.before.parentNode.insertBefore(layer, option.before);
-    } else {
-      document.body.appendChild(layer);
-    }
-    this.layer = layer;
-    this.setMode(SETTINGS.selectionStyle);
-    return layer;
-  }
-
-  resize() {
-    // 层是全屏 fixed，自适应；这里只作废缓存，交给下一次选区变化重铺。
-    this.washKey = '';
-  }
-
-  setMode(mode) {
-    this.mode = mode === 'classic' ? 'classic' : 'ink';
-    document.documentElement.dataset.dnSel = this.mode;
-    if (this.mode !== 'ink') this.clear();
-  }
-
-  /** selectionchange 只留一个标记：拖动时一秒几十次，测量放到下一帧。 */
-  mark() {
-    this.dirty = true;
-  }
-
-  sync(now) {
-    if (this.dirty) {
-      this.dirty = false;
-      this.capture(now);
-    }
-    return this.inkEls.length > 0;
-  }
-
-  clear() {
-    for (const el of this.washEls) el.remove();
-    for (const item of this.inkEls) item.el.remove();
-    this.washEls = [];
-    this.inkEls = [];
-    this.cells = [];
-    this.wash = [];
-    if (this.byCell) this.byCell.clear();
-    this.live = false;
-    this.prev = null;
-    this.washKey = 'off';
-    for (const id of this.timers) clearTimeout(id);
-    this.timers = [];
-  }
-
-  capture(now) {
-    const selection = window.getSelection();
-    if (this.mode !== 'ink' || !selection || selection.rangeCount === 0 || selection.isCollapsed) {
-      if (this.live) this.clear();
-      return;
-    }
-    const range = selection.getRangeAt(0);
-    const host = range.commonAncestorContainer;
-    const holder = host.nodeType === 1 ? host : host.parentElement;
-    // 输入框里的选择交给原生：那块归墨迹光标管，两套不要撞在一起。
-    if (holder && holder.closest && holder.closest('input, textarea')) {
-      if (this.live) this.clear();
-      return;
-    }
-    this.live = true;
-    this.paintWash(range);
-    if (reduceMotion || !this.range) {
-      this.prev = boundaryOf(range);
-      return;
-    }
-    // 一次选中太多字只给洗色——上游也是这么退让的（MAX_ANIMATED）。
-    if (selection.toString().length > SELECT_MAX_ANIMATED) {
-      this.prev = boundaryOf(range);
-      return;
-    }
-    const delta = this.deltaOf(range);
-    this.prev = boundaryOf(range);
-    if (delta) this.dissolve(delta);
-  }
-
-  /** 洗色：每行一段，四周柔化，像一笔水彩从字后面洇出来。 */
-  paintWash(range) {
-    const rects = range.getClientRects();
-    const height = window.innerHeight;
-    const next = [];
-    let key = '';
-    for (let i = 0; i < rects.length; i++) {
-      const rect = rects[i];
-      if (!(rect.width > 0.6 && rect.height > 0.6)) continue;
-      if (rect.bottom < 0 || rect.top > height) continue;
-      next.push({left: rect.left, top: rect.top, width: rect.width, height: rect.height});
-      key += Math.round(rect.left) + ',' + Math.round(rect.top) + ',' + Math.round(rect.width) + ';';
-    }
-    key = key || 'empty';
-    if (key === this.washKey) return;
-    this.washKey = key;
-    for (const el of this.washEls) el.remove();
-    this.washEls = [];
-    this.wash = next;
-    for (const rect of next) {
-      const inset = rect.height * 0.12;
-      const el = document.createElement('i');
-      el.className = 'dn-sel-wash';
-      el.style.left = (rect.left - 1) + 'px';
-      el.style.top = (rect.top + inset) + 'px';
-      el.style.width = (rect.width + 2) + 'px';
-      el.style.height = (rect.height - inset * 2) + 'px';
-      el.style.borderRadius = (rect.height * 0.35) + 'px';
-      this.layer.appendChild(el);
-      this.washEls.push(el);
-    }
-  }
-
-  /** 新进来的那一段：选区从哪一头长大，就取那一头多出来的部分。 */
-  deltaOf(range) {
-    const prev = this.prev;
-    try {
-      if (!prev || !prev.startNode || !prev.startNode.isConnected
-        || !prev.endNode || !prev.endNode.isConnected) {
-        return range.cloneRange();
-      }
-      if (prev.startNode === range.startContainer && prev.startOffset === range.startOffset) {
-        const delta = document.createRange();
-        delta.setStart(prev.endNode, prev.endOffset);
-        delta.setEnd(range.endContainer, range.endOffset);
-        return delta.collapsed ? null : delta;
-      }
-      if (prev.endNode === range.endContainer && prev.endOffset === range.endOffset) {
-        const delta = document.createRange();
-        delta.setStart(range.startContainer, range.startOffset);
-        delta.setEnd(prev.startNode, prev.startOffset);
-        return delta.collapsed ? null : delta;
-      }
-      return range.cloneRange();
-    } catch (error) {
-      return null;
-    }
-  }
-
-  /** 逐字量出新进来的那一段，交给 CSS 去化开。 */
-  dissolve(delta) {
-    const looks = new Map();
-    const startNode = delta.startContainer;
-    const endNode = delta.endContainer;
-    const walker = document.createTreeWalker(delta.commonAncestorContainer, NodeFilter.SHOW_TEXT, null);
-    walker.currentNode = startNode;
-    const height = window.innerHeight;
-    const made = [];
-    let count = 0;
-    let visited = 0;
-    let node = startNode.nodeType === 3 ? startNode : null;
-    while (count < SELECT_MEASURE_BUDGET) {
-      if (!node) {
-        node = walker.nextNode();
-        if (!node) break;
-      }
-      const current = node;
-      node = null;
-      if (++visited > SELECT_NODE_BUDGET) break;
-      // 越过终点就停；起点之前的节点跳过（起点落在元素边界上时会遇到）。
-      if (!endNode.contains(current) && (endNode.compareDocumentPosition(current) & 4)) break;
-      if (!startNode.contains(current) && startNode !== current
-        && (startNode.compareDocumentPosition(current) & 2)) continue;
-      const from = current === startNode ? delta.startOffset : 0;
-      const to = current === endNode ? delta.endOffset : current.data.length;
-      if (to <= from) continue;
-      const holder = current.parentElement;
-      if (!holder) continue;
-      let look = looks.get(holder);
-      if (look === undefined) {
-        const computed = getComputedStyle(holder);
-        const hidden = computed.visibility === 'hidden' || computed.display === 'none'
-          || Number(computed.opacity) === 0;
-        look = hidden ? null : {
-          style: computed.fontStyle,
-          weight: computed.fontWeight,
-          size: computed.fontSize,
-          family: computed.fontFamily,
-          spacing: computed.letterSpacing,
-          color: computed.color
-        };
-        looks.set(holder, look);
-      }
-      if (!look) continue;
-      for (let i = from; i < to && count < SELECT_MEASURE_BUDGET; i++) {
-        const char = current.data[i];
-        if (!char || char.trim() === '') continue;
-        this.range.setStart(current, i);
-        this.range.setEnd(current, i + 1);
-        const rect = this.range.getBoundingClientRect();
-        if (!(rect.width > 0.4 && rect.height > 0.4)) continue;
-        if (rect.bottom < -40 || rect.top > height + 40) continue;
-        const delay = Math.min(SELECT_MAX_STAGGER_MS, count * SELECT_STAGGER_MS) + 'ms';
-        const el = document.createElement('span');
-        el.className = 'dn-sel';
-        el.style.left = rect.left + 'px';
-        el.style.top = rect.top + 'px';
-        el.style.width = rect.width + 'px';
-        el.style.height = rect.height + 'px';
-        el.style.fontFamily = look.family;
-        el.style.fontSize = look.size;
-        el.style.fontWeight = look.weight;
-        el.style.fontStyle = look.style;
-        // letter-spacing 是排版的一部分：少抄一格，后面每个字都会往下漂。
-        if (look.spacing && look.spacing !== 'normal') el.style.letterSpacing = look.spacing;
-        el.style.lineHeight = rect.height + 'px';
-        el.style.color = look.color;
-        el.style.animationDelay = delay;
-        el.dataset.cell = Math.round(rect.left) + ':' + Math.round(rect.top);
-        const cover = document.createElement('i');
-        cover.className = 'dn-sel-cover';
-        cover.style.animationDelay = delay;
-        const ink = document.createElement('b');
-        ink.className = 'dn-sel-ink';
-        ink.style.animationDelay = delay;
-        ink.textContent = char;
-        el.append(cover, ink);
-        // 这一格上一轮已经画过就先撤掉：重复的 span 会让字叠两层，
-        // 而且新盖纸会盖掉旧墨，看起来像缺字。
-        const key = Math.round(rect.left) + ':' + Math.round(rect.top);
-        const previous = this.byCell.get(key);
-        if (previous) {
-          previous.remove();
-          this.inkEls = this.inkEls.filter((item) => item.el !== previous);
-        }
-        this.layer.appendChild(el);
-        this.inkEls.push({el: el});
-        this.byCell.set(key, el);
-        made.push(el);
-        count += 1;
-      }
-    }
-    this.cells = made;
-    if (made.length) this.schedule(made);
-  }
-
-  /** 一批动画结束后统一回收：span 不能留在 DOM 里越积越多。 */
-  schedule(made) {
-    const life = SELECT_DISSOLVE_MS + SELECT_MAX_STAGGER_MS + 120;
-    const timer = setTimeout(() => {
-      for (const el of made) {
-        el.remove();
-        const key = el.dataset.cell;
-        if (key && this.byCell.get(key) === el) this.byCell.delete(key);
-      }
-      this.inkEls = this.inkEls.filter((item) => made.indexOf(item.el) < 0);
-      this.cells = this.inkEls.map((item) => item.el);
-      this.timers = this.timers.filter((id) => id !== timer);
-    }, life);
-    this.timers.push(timer);
-  }
-
-  destroy() {
-    document.documentElement.removeAttribute('data-dn-sel');
-    this.clear();
-    if (this.layer && this.layer.parentNode) this.layer.remove();
-    this.layer = null;
-  }
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -2186,7 +1834,7 @@ class ScrollClip {
   }
 }
 
-const CSS_TEXT = "/* dsh-nocturne —— 纸的配色由 token 决定，材质由 canvas 决定。\n   这里只做两件事：把 DSH 的语义别名换成纸与墨；给两片 canvas 找位置。\n   颜色取自 Typewriter-Nocturne 的 papers.ts（MIT）。 */\n\nhtml, :root {\n  --dn-paper: #efdfbd;\n  --dn-ink: #2a2019;\n  --dn-ink-muted: #6b5f52;\n  --dn-room: #241a14;\n  --dn-room-edge: #070504;\n  --dn-gilt: #6f5420;\n  --dn-light-rgb: 255 210 154;\n  --dn-metal-lo: #5e431c;\n  --dn-metal-hi: #f3dca4;\n  --dn-metal: #b8904c;\n  /* 缮写室面板用到的字族：宿主不一定有，给出与样张一致的回落链 */\n  --font-ui: \"EB Garamond\", \"Iowan Old Style\", Palatino, Georgia, serif;\n  --font-display: \"Cormorant Garamond\", \"EB Garamond\", Georgia, serif;\n  --font-mono: var(--dsh-font-family-code, ui-monospace, monospace);\n\n  /* 配色 token 不写在这里：运行时由 applyTokens() 内联写入并带 !important。\n     写在这里会反过来压过内联更新，导致换纸只换画布、不换界面底色。 */\n\n  /* 字体：衬线正文，等宽复古代码。字体文件不随包分发，走系统栈回落。 */\n  --dsh-font-family-text: \"EB Garamond\", \"Iowan Old Style\", \"Palatino Linotype\", Palatino,\n    Georgia, \"Source Han Serif SC\", \"Songti SC\", \"Noto Serif CJK SC\", serif !important;\n  --dsh-font-family-code: \"Courier Prime\", \"IBM Plex Mono\", \"Courier New\",\n    \"DejaVu Sans Mono\", ui-monospace, monospace !important;\n}\n\n/* 整扇窗就是这张纸。没被画到的地方也必须落到纸色上——否则留给 `html` 的\n   默认底会把正文区露成黑洞（第一次装载测试就是这么翻车的）。 */\n/* 纸的底色挂在 --dn-sheet 上：接管配色时是纸色，只让位时是 transparent（宿主自己画）。 */\nhtml, body { background: var(--dn-sheet, transparent) !important; }\n\n/* 两片 canvas：直接挂在 body 下，不能包一层带 z-index 的容器——\n   那会给它们造一个隔离栈，multiply 就再也合不到页面上（实测见 docs/nocturne.md）。 */\ncanvas[data-dn=\"paper\"], canvas[data-dn=\"glow\"] {\n  position: fixed;\n  left: 0;\n  top: 0;\n  display: block;\n  pointer-events: none;\n  transform-origin: 0 0;\n}\ncanvas[data-dn=\"paper\"] {\n  mix-blend-mode: multiply;\n  z-index: 2147482000;\n}\ncanvas[data-dn=\"glow\"] {\n  mix-blend-mode: screen;\n  z-index: 2147482001;\n}\n\n/* 纸的四边压暗，给出\"一张纸\"的厚度；比 TN 的 #vignette 更贴边，\n   因为这里的纸是整扇窗。 */\nhtml::after {\n  content: \"\";\n  position: fixed;\n  inset: 0;\n  z-index: 2147482002;\n  pointer-events: none;\n  background: radial-gradient(ellipse 92% 88% at 50% 46%, transparent 52%, rgba(0, 0, 0, .42) 100%);\n}\n\n/* 缮写室是\"器物\"，不是纸上的字：它悬在纸光之上，不被灯压暗——\n   与上游一致，Studio 属于窗框而不属于纸面。 */\n.dn-studio { z-index: 2147483000; }\n.dn-handle { z-index: 2147482999; opacity: .55; }\n\n\n.dn-caret{\n  position:fixed; left:0; top:0; z-index: 2147481999;\n  display:none; pointer-events:none; will-change:transform;\n  --dn-ink-size:16px;\n  --dn-ink-weight:400;\n}\n.dn-ink-blot,\n.dn-ink-halo{\n  position:absolute; inset:7% 0.5px;\n  background:var(--dn-caret-ink, #3a2c20);\n}\n.dn-ink-blot{\n  border-radius:22% 14% 18% 12% / 12% 20% 10% 18%;\n  box-shadow:\n    inset 0 0 0 .5px rgba(0,0,0,.22),\n    inset 0 0 3px rgba(0,0,0,.28),\n    0 0 1.2px var(--dn-caret-ink, #3a2c20);\n  filter:blur(.3px);\n}\n.dn-ink-halo{\n  border-radius:40%;\n  opacity:0;\n  filter:blur(2.5px);\n}\n.dn-ink-glyph{\n  position:absolute; inset:0;\n  display:flex; align-items:center; justify-content:center;\n  color:var(--dsw-alias-bg-base, #efdfbd);\n  font-family:var(--dsh-font-family-code, ui-monospace, monospace);\n  font-size:var(--dn-ink-size);\n  font-weight:var(--dn-ink-weight);\n  line-height:1; white-space:pre;\n  font-variant-ligatures:none;\n}\n/* 失焦时墨退掉，只留一个淡淡的格子轮廓。 */\n.dn-caret[data-focused=\"false\"] .dn-ink-blot,\n.dn-caret[data-focused=\"false\"] .dn-ink-halo,\n.dn-caret[data-focused=\"false\"] .dn-ink-glyph{ display:none }\n.dn-caret[data-focused=\"false\"]::after{\n  content:\"\"; position:absolute; inset:7% .5px;\n  border:1px solid var(--dn-caret-ink, #3a2c20); border-radius:2px; opacity:.45;\n}\n.dn-caret[data-appearance=\"dark\"] .dn-ink-blot{\n  box-shadow:\n    inset 0 0 0 .5px rgba(255,255,255,.25),\n    inset 0 0 3px rgba(255,255,255,.3),\n    0 0 1.2px var(--dn-caret-ink, #3a2c20);\n}\n/* ── 羽毛笔光标：形状、渐变、摆动、光晕都照搬上游 .tn-quill ─────────────── */\n.dn-quill{\n  position:fixed; left:0; top:0; z-index:1;\n  display:none; pointer-events:none; will-change:transform;\n  --dn-quill-edge:#120e0c;\n  --dn-quill-body:#2b2420;\n  --dn-quill-sheen:#5f5753;\n  --dn-quill-barb:rgba(168,152,138,.42);\n  --dn-quill-rachis:#e4d8c0;\n  --dn-quill-down:rgba(70,60,54,.65);\n  filter:drop-shadow(.8px 1.6px 1px rgba(0,0,0,.3));\n  animation:dn-quill-breathe 1.2s ease-in-out infinite alternate;\n}\n.dn-quill[data-appearance=\"dark\"]{\n  --dn-quill-edge:#9d9485;\n  --dn-quill-body:#ebe4d6;\n  --dn-quill-sheen:#fffdf8;\n  --dn-quill-barb:rgba(140,128,108,.5);\n  --dn-quill-rachis:#fffdf6;\n  --dn-quill-down:rgba(236,229,216,.75);\n}\n.dn-quill svg{display:block; width:100%; height:100%; overflow:visible}\n.dn-quill-sway{transform-box:view-box; transform-origin:0 0; animation:dn-quill-sway 3.4s ease-in-out infinite alternate}\n.dn-quill-vane{fill:url(#dn-quill-vane)}\n.dn-quill-barbs{fill:none; stroke:var(--dn-quill-barb); stroke-width:.28; stroke-linecap:round}\n.dn-quill-rachis{fill:var(--dn-quill-rachis)}\n.dn-quill-rachis-light{fill:none; stroke:#fff; stroke-width:.22; opacity:.55}\n.dn-quill-down{fill:none; stroke:var(--dn-quill-down); stroke-width:.35; stroke-linecap:round}\n.dn-quill-engraving{fill:none; stroke:var(--dn-metal-lo); stroke-width:.3}\n.dn-quill-hole{fill:var(--dn-metal-lo)}\n.dn-quill-shine{fill:#fff; opacity:.2; animation:dn-quill-shine 2.8s ease-in-out infinite}\n.dn-quill-glint{fill:#fff; opacity:0; animation:dn-quill-glint 2.8s ease-in-out infinite}\n.dn-quill[data-focused=\"false\"]{opacity:.4; animation:none}\n.dn-quill[data-focused=\"false\"] .dn-quill-sway,\n.dn-quill[data-focused=\"false\"] .dn-quill-shine,\n.dn-quill[data-focused=\"false\"] .dn-quill-glint{animation:none}\n@keyframes dn-quill-breathe{from{opacity:1} to{opacity:.62}}\n@keyframes dn-quill-sway{from{transform:rotate(-1.6deg)} to{transform:rotate(1.6deg)}}\n@keyframes dn-quill-shine{0%{transform:translateY(0)} 100%{transform:translateY(-46px)}}\n@keyframes dn-quill-glint{\n  0%,72%{opacity:0}\n  80%{opacity:.9}\n  88%{opacity:.15}\n  100%{opacity:0}\n}\n\n/* ── 缮写室 Studio：一张悬在桌上的深色玻璃面板 ─────────────────────────── */\n.dn-studio{\n  position:fixed; z-index:40; top:52px; right:18px;\n  width:296px; max-height:calc(100% - 88px); overflow-y:auto;\n  padding:16px 18px 18px;\n  border:1px solid rgba(176,138,74,.35);\n  border-radius:12px;\n  background:rgba(22,16,12,.9);\n  backdrop-filter:blur(12px);\n  box-shadow:0 24px 60px -20px rgba(0,0,0,.8);\n  color:#f1e6cf;\n  font-family:var(--font-ui);\n  display:none;\n}\n.dn-studio[data-open=\"true\"]{display:block}\n.dn-studio .eyebrow{\n  font-variant:small-caps; letter-spacing:.2em; font-size:11px;\n  color:rgba(241,230,207,.62);\n}\n.dn-studio h2{\n  margin:0 0 10px;\n  font-family:var(--font-display); font-style:italic; font-weight:500;\n  font-size:23px; line-height:1.2; text-wrap:balance;\n}\n.dn-studio .group{\n  margin-top:13px; padding-top:11px;\n  border-top:1px solid rgba(176,138,74,.28);\n  display:grid; gap:9px;\n}\n.dn-studio .group h3{\n  margin:0; font-weight:500; font-style:italic; font-size:16px;\n}\n.dn-studio .grid{display:grid; grid-template-columns:repeat(3, 1fr); gap:5px}\n.dn-studio .grid.two{grid-template-columns:repeat(2, 1fr)}\n.dn-studio button.choice{\n  padding:5px 4px 6px;\n  border:1px solid rgba(176,138,74,.3); border-radius:6px;\n  background:transparent; color:#f1e6cf;\n  font-family:var(--font-ui); font-size:12.5px; line-height:1.2;\n  cursor:pointer; display:grid; gap:4px; justify-items:stretch;\n}\n.dn-studio button.choice[aria-pressed=\"true\"]{\n  border-color:#b08a4a;\n  box-shadow:inset 0 0 0 1px #b08a4a;\n}\n.dn-studio button.choice:focus-visible{outline:1px dotted #b08a4a; outline-offset:2px}\n.dn-studio .swatch{\n  height:20px; border-radius:3px;\n  box-shadow:inset 0 0 0 1px rgba(0,0,0,.35);\n}\n.dn-studio .slider{display:grid; gap:2px}\n.dn-studio .head{display:flex; justify-content:space-between; align-items:center}\n.dn-studio .label,\n.dn-studio .value{\n  font-family:var(--dsh-font-family-code, ui-monospace, monospace); font-size:10.5px;\n  letter-spacing:.14em; text-transform:uppercase;\n  color:rgba(241,230,207,.62); font-variant-numeric:tabular-nums;\n}\n.dn-studio .value{color:#f1e6cf; letter-spacing:.04em}\n.dn-studio input[type=\"range\"]{\n  -webkit-appearance:none; appearance:none;\n  width:100%; height:16px; margin:0; cursor:pointer; background:\n    linear-gradient(rgba(241,230,207,.62), rgba(241,230,207,.62)) 0 50% / 100% 1px no-repeat,\n    repeating-linear-gradient(90deg, rgba(241,230,207,.62) 0 1px, transparent 1px 10%) 0 50% / 100% 8px no-repeat;\n}\n.dn-studio input[type=\"range\"]::-webkit-slider-thumb{\n  -webkit-appearance:none; width:9px; height:16px; border-radius:2px;\n  border:1px solid #5e431c;\n  background:linear-gradient(90deg, #f3dca4, #b8904c 55%, #5e431c);\n  box-shadow:0 1px 3px rgba(0,0,0,.5);\n}\n.dn-studio input[type=\"range\"]:focus-visible{outline:1px dotted #b08a4a; outline-offset:3px}\n.dn-studio .switch{display:flex; justify-content:space-between; align-items:center}\n.dn-studio .toggle{\n  position:relative; width:36px; height:19px; flex:none;\n  border-radius:10px; border:1px solid rgba(176,138,74,.3);\n  background:transparent; cursor:pointer; padding:0;\n}\n.dn-studio .toggle::after{\n  content:\"\"; position:absolute; top:2px; left:2px;\n  width:13px; height:13px; border-radius:50%;\n  background:rgba(241,230,207,.62);\n  transition:transform 140ms ease;\n}\n.dn-studio .toggle[aria-checked=\"true\"]{border-color:#b08a4a; background:rgba(255,215,154,.12)}\n.dn-studio .toggle[aria-checked=\"true\"]::after{\n  transform:translateX(17px);\n  background:radial-gradient(circle at 35% 35%, #f3dca4, #b8904c 60%, #5e431c);\n}\n.dn-studio button.reset{\n  width:100%; padding:6px 8px;\n  border:1px solid rgba(176,138,74,.45); border-radius:6px;\n  background:rgba(255,215,154,.1); color:#f3dca4;\n  font-family:var(--font-ui); font-size:13px; cursor:pointer;\n}\n.dn-studio button.reset:hover{background:rgba(255,215,154,.18)}\n.dn-studio button.reset:focus-visible{outline:1px dotted #b08a4a; outline-offset:2px}\n.dn-studio .note{\n  margin:0; font-size:12px; line-height:1.5;\n  color:rgba(241,230,207,.55);\n}\n.dn-studio .close{\n  position:absolute; top:10px; right:10px;\n  width:22px; height:22px; display:grid; place-items:center;\n  border:1px solid transparent; border-radius:5px;\n  background:transparent; color:rgba(241,230,207,.62);\n  font-size:15px; line-height:1; cursor:pointer;\n}\n.dn-studio .close:hover{color:#f1e6cf; border-color:rgba(176,138,74,.4)}\n\n/* 右下角那个把手：平时很淡，悬停才亮起来 */\n.dn-handle{\n  position:fixed; z-index:39; right:18px; bottom:16px;\n  display:flex; align-items:center; gap:7px;\n  padding:7px 11px;\n  border:1px solid rgba(176,138,74,.32); border-radius:8px;\n  background:rgba(22,16,12,.9); backdrop-filter:blur(12px);\n  color:rgba(241,230,207,.66);\n  font-family:var(--dsh-font-family-code, ui-monospace, monospace); font-size:10.5px;\n  letter-spacing:.16em; text-transform:uppercase;\n  cursor:pointer; opacity:.4;\n  transition:opacity 200ms ease;\n}\n.dn-handle:hover,.dn-handle:focus-visible{opacity:1}\n.dn-handle[aria-expanded=\"true\"]{opacity:0; pointer-events:none}\n.dn-handle:focus-visible{outline:1px dotted #b08a4a; outline-offset:2px}\n.dn-handle svg{width:13px; height:13px; fill:none; stroke:currentColor; stroke-width:1.3; stroke-linecap:round}\n\n@media (max-width:720px){\n  .dn-studio{left:14px; right:14px; width:auto; top:auto; bottom:62px; max-height:52%}\n}\n@media (prefers-reduced-motion:reduce){\n  .dn-quill,.dn-quill-sway,.dn-quill-shine,.dn-quill-glint{animation:none}\n  .dn-handle,.dn-studio .toggle::after{transition:none}\n}\n\n\n/* ── 选区：墨水溶解（上游 selection-layer.ts 的 DOM 版） ────────────────\n   ink    ：原生的平涂高亮隐去，改成洗色 + 逐字化开的墨\n   classic：留浏览器的平涂高亮，只是把颜色换成主题的选色 */\nhtml[data-dn-sel=\"ink\"] ::selection{ background:transparent !important }\nhtml[data-dn-sel=\"classic\"] ::selection{ background:var(--dn-wash, rgba(52, 64, 112, .2)); color:inherit }\nhtml[data-dn-sel=\"classic\"]::-moz-selection{ background:var(--dn-wash, rgba(52, 64, 112, .2)); color:inherit }\n\n/* 选区层：铺在正文之上、纸光之下——z-index 与羽毛笔同档，所以灯会把洗色一起照亮，\n   洗色才像洇进纸里的墨，而不是浮在纸上的一块色片。\n   动画全部交给 CSS：拖动时主线程不必逐帧画。 */\n.dn-select{ position:fixed; left:0; top:0; z-index:1; pointer-events:none; overflow:visible }\n.dn-sel-wash{\n  position:absolute; display:block;\n  border-radius:9px;\n  background:var(--dn-wash, rgba(52, 64, 112, .2));\n  box-shadow:0 0 6px var(--dn-wash, rgba(52, 64, 112, .2));\n}\n.dn-sel{\n  position:absolute; display:block; white-space:pre; overflow:visible;\n  transform-origin:50% 50%;\n}\n/* 盖纸：先把这一格的字压住，末段再让开。\n   四周要出血 1–2px：字母的墨会溢出它的字宽盒子，恰好不外扩就会在格边留下\n   一道原字的竖缝，远看像\"重影\"。上游按格子画、格子比字宽，所以没这个问题。 */\n.dn-sel-cover{\n  position:absolute; inset:-1px -2px;\n  background:var(--dn-paper, #efdfbd);\n  opacity:0;\n  animation:dn-sel-cover 680ms ease-in-out both;\n}\n/* 墨：放大、虚化、淡到 15%，再聚拢复原。三段比例照上游 30 / 50 / 70。 */\n.dn-sel-ink{\n  position:relative; display:block; white-space:pre;\n  font:inherit; color:inherit;\n  animation:dn-sel-ink 680ms ease-in-out both;\n}\n/* 三点墨：靠一个伪元素的 box-shadow 画出三颗，随 transform 一起散开又回来。 */\n.dn-sel-ink::after{\n  content:\"\"; position:absolute; left:50%; top:50%;\n  width:1.4px; height:1.4px; margin:-.7px 0 0 -.7px;\n  border-radius:50%; background:currentColor;\n  box-shadow:7px 2px 0 currentColor, -5px 6px 0 currentColor, 2px -7px 0 currentColor;\n  opacity:0;\n  animation:dn-sel-speck 680ms ease-in-out both;\n  /* 三点墨跟着本字的错峰走：animation 不自继承，但伪元素可以从宿主元素继承这个值。 */\n  animation-delay:inherit;\n}\n@keyframes dn-sel-cover{ 0%{opacity:0} 30%{opacity:1} 70%{opacity:1} 100%{opacity:0} }\n@keyframes dn-sel-ink{\n  0%{transform:scale(1); filter:blur(0); opacity:1}\n  50%{transform:scale(1.18); filter:blur(5px); opacity:.15}\n  100%{transform:scale(1); filter:blur(0); opacity:1}\n}\n@keyframes dn-sel-speck{\n  0%{transform:scale(0); opacity:0}\n  50%{transform:scale(1); opacity:.55}\n  100%{transform:scale(0); opacity:0}\n}\n@media (prefers-reduced-motion:reduce){ .dn-sel{ display:none } }\n\n/* ── 纸夹：一枚 Gem 夹夹在纸的右缘 ────────────────────────────────────\n   外圈在纸前，内舌在纸后（只留下压住纸面的一道痕），弯头探出纸外。\n   金属丝按\"上左受光\"的管状上色：暗边 + 本体 + 沿光侧的高光。 */\n.dn-scroll{\n  position:fixed; left:0; top:0;\n  touch-action:none; cursor:grab; will-change:transform;\n}\n.dn-scroll[hidden]{ display:none }\n.dn-scroll:active{ cursor:grabbing }\n.dn-scroll:focus-visible{ outline:1px dotted var(--dn-metal, #b8904c); outline-offset:3px }\n.dn-scroll-clip svg{ display:block; width:100%; height:100%; overflow:visible }\n.dn-scroll-clip path{ fill:none; stroke-linecap:round; stroke-linejoin:round }\n.dn-clip-edge{ stroke-width:3.3 }\n.dn-clip-body{ stroke-width:2.6 }\n.dn-clip-light{ stroke-width:.9; opacity:.9 }\n.dn-clip-glint{ stroke:#fff; stroke-width:.55; stroke-dasharray:1.6 11 .8 17; opacity:.85 }\n.dn-clip-shadow{ stroke:rgba(28,18,8,.42); stroke-width:3; transform:translate(1px,1.9px) }\n.dn-clip-pressed{ stroke:rgba(40,28,16,.07); stroke-width:2.2 }\n.dn-scroll[data-appearance=\"dark\"] .dn-clip-shadow{ stroke:rgba(0,0,0,.62) }\n.dn-scroll[data-appearance=\"dark\"] .dn-clip-pressed{ stroke:rgba(255,255,255,.05) }\n.dn-scroll-bar{\n  border-radius:999px;\n  background:rgba(255,255,255,.92);\n  box-shadow:0 0 0 1px rgba(0,0,0,.08), 0 2px 6px rgba(0,0,0,.25);\n}\n.dn-scroll[data-appearance=\"dark\"].dn-scroll-bar{ background:rgba(255,255,255,.75) }\n\n/* 容器的原生滚条让位给纸夹；滚轮、键盘、拖动都还在。 */\n[data-dn-scroll=\"custom\"]{ scrollbar-width:none; -ms-overflow-style:none }\n[data-dn-scroll=\"custom\"]::-webkit-scrollbar{ width:0; height:0 }\n";
+const CSS_TEXT = "/* dsh-nocturne —— 纸的配色由 token 决定，材质由 canvas 决定。\n   这里只做两件事：把 DSH 的语义别名换成纸与墨；给两片 canvas 找位置。\n   颜色取自 Typewriter-Nocturne 的 papers.ts（MIT）。 */\n\nhtml, :root {\n  --dn-paper: #efdfbd;\n  --dn-ink: #2a2019;\n  --dn-ink-muted: #6b5f52;\n  --dn-room: #241a14;\n  --dn-room-edge: #070504;\n  --dn-gilt: #6f5420;\n  --dn-light-rgb: 255 210 154;\n  --dn-metal-lo: #5e431c;\n  --dn-metal-hi: #f3dca4;\n  --dn-metal: #b8904c;\n  /* 缮写室面板用到的字族：宿主不一定有，给出与样张一致的回落链 */\n  --font-ui: \"EB Garamond\", \"Iowan Old Style\", Palatino, Georgia, serif;\n  --font-display: \"Cormorant Garamond\", \"EB Garamond\", Georgia, serif;\n  --font-mono: var(--dsh-font-family-code, ui-monospace, monospace);\n\n  /* 配色 token 不写在这里：运行时由 applyTokens() 内联写入并带 !important。\n     写在这里会反过来压过内联更新，导致换纸只换画布、不换界面底色。 */\n\n  /* 字体：衬线正文，等宽复古代码。字体文件不随包分发，走系统栈回落。 */\n  --dsh-font-family-text: \"EB Garamond\", \"Iowan Old Style\", \"Palatino Linotype\", Palatino,\n    Georgia, \"Source Han Serif SC\", \"Songti SC\", \"Noto Serif CJK SC\", serif !important;\n  --dsh-font-family-code: \"Courier Prime\", \"IBM Plex Mono\", \"Courier New\",\n    \"DejaVu Sans Mono\", ui-monospace, monospace !important;\n}\n\n/* 整扇窗就是这张纸。没被画到的地方也必须落到纸色上——否则留给 `html` 的\n   默认底会把正文区露成黑洞（第一次装载测试就是这么翻车的）。 */\n/* 纸的底色挂在 --dn-sheet 上：接管配色时是纸色，只让位时是 transparent（宿主自己画）。 */\nhtml, body { background: var(--dn-sheet, transparent) !important; }\n\n/* 两片 canvas：直接挂在 body 下，不能包一层带 z-index 的容器——\n   那会给它们造一个隔离栈，multiply 就再也合不到页面上（实测见 docs/nocturne.md）。 */\ncanvas[data-dn=\"paper\"], canvas[data-dn=\"glow\"] {\n  position: fixed;\n  left: 0;\n  top: 0;\n  display: block;\n  pointer-events: none;\n  transform-origin: 0 0;\n}\ncanvas[data-dn=\"paper\"] {\n  mix-blend-mode: multiply;\n  z-index: 2147482000;\n}\ncanvas[data-dn=\"glow\"] {\n  mix-blend-mode: screen;\n  z-index: 2147482001;\n}\n\n/* 纸的四边压暗，给出\"一张纸\"的厚度；比 TN 的 #vignette 更贴边，\n   因为这里的纸是整扇窗。 */\nhtml::after {\n  content: \"\";\n  position: fixed;\n  inset: 0;\n  z-index: 2147482002;\n  pointer-events: none;\n  background: radial-gradient(ellipse 92% 88% at 50% 46%, transparent 52%, rgba(0, 0, 0, .42) 100%);\n}\n\n/* 缮写室是\"器物\"，不是纸上的字：它悬在纸光之上，不被灯压暗——\n   与上游一致，Studio 属于窗框而不属于纸面。 */\n.dn-studio { z-index: 2147483000; }\n.dn-handle { z-index: 2147482999; opacity: .55; }\n\n\n.dn-caret{\n  position:fixed; left:0; top:0; z-index: 2147481999;\n  display:none; pointer-events:none; will-change:transform;\n  --dn-ink-size:16px;\n  --dn-ink-weight:400;\n}\n.dn-ink-blot,\n.dn-ink-halo{\n  position:absolute; inset:7% 0.5px;\n  background:var(--dn-caret-ink, #3a2c20);\n}\n.dn-ink-blot{\n  border-radius:22% 14% 18% 12% / 12% 20% 10% 18%;\n  box-shadow:\n    inset 0 0 0 .5px rgba(0,0,0,.22),\n    inset 0 0 3px rgba(0,0,0,.28),\n    0 0 1.2px var(--dn-caret-ink, #3a2c20);\n  filter:blur(.3px);\n}\n.dn-ink-halo{\n  border-radius:40%;\n  opacity:0;\n  filter:blur(2.5px);\n}\n.dn-ink-glyph{\n  position:absolute; inset:0;\n  display:flex; align-items:center; justify-content:center;\n  color:var(--dsw-alias-bg-base, #efdfbd);\n  font-family:var(--dsh-font-family-code, ui-monospace, monospace);\n  font-size:var(--dn-ink-size);\n  font-weight:var(--dn-ink-weight);\n  line-height:1; white-space:pre;\n  font-variant-ligatures:none;\n}\n/* 失焦时墨退掉，只留一个淡淡的格子轮廓。 */\n.dn-caret[data-focused=\"false\"] .dn-ink-blot,\n.dn-caret[data-focused=\"false\"] .dn-ink-halo,\n.dn-caret[data-focused=\"false\"] .dn-ink-glyph{ display:none }\n.dn-caret[data-focused=\"false\"]::after{\n  content:\"\"; position:absolute; inset:7% .5px;\n  border:1px solid var(--dn-caret-ink, #3a2c20); border-radius:2px; opacity:.45;\n}\n.dn-caret[data-appearance=\"dark\"] .dn-ink-blot{\n  box-shadow:\n    inset 0 0 0 .5px rgba(255,255,255,.25),\n    inset 0 0 3px rgba(255,255,255,.3),\n    0 0 1.2px var(--dn-caret-ink, #3a2c20);\n}\n/* ── 羽毛笔光标：形状、渐变、摆动、光晕都照搬上游 .tn-quill ─────────────── */\n.dn-quill{\n  position:fixed; left:0; top:0; z-index:1;\n  display:none; pointer-events:none; will-change:transform;\n  --dn-quill-edge:#120e0c;\n  --dn-quill-body:#2b2420;\n  --dn-quill-sheen:#5f5753;\n  --dn-quill-barb:rgba(168,152,138,.42);\n  --dn-quill-rachis:#e4d8c0;\n  --dn-quill-down:rgba(70,60,54,.65);\n  filter:drop-shadow(.8px 1.6px 1px rgba(0,0,0,.3));\n  animation:dn-quill-breathe 1.2s ease-in-out infinite alternate;\n}\n.dn-quill[data-appearance=\"dark\"]{\n  --dn-quill-edge:#9d9485;\n  --dn-quill-body:#ebe4d6;\n  --dn-quill-sheen:#fffdf8;\n  --dn-quill-barb:rgba(140,128,108,.5);\n  --dn-quill-rachis:#fffdf6;\n  --dn-quill-down:rgba(236,229,216,.75);\n}\n.dn-quill svg{display:block; width:100%; height:100%; overflow:visible}\n.dn-quill-sway{transform-box:view-box; transform-origin:0 0; animation:dn-quill-sway 3.4s ease-in-out infinite alternate}\n.dn-quill-vane{fill:url(#dn-quill-vane)}\n.dn-quill-barbs{fill:none; stroke:var(--dn-quill-barb); stroke-width:.28; stroke-linecap:round}\n.dn-quill-rachis{fill:var(--dn-quill-rachis)}\n.dn-quill-rachis-light{fill:none; stroke:#fff; stroke-width:.22; opacity:.55}\n.dn-quill-down{fill:none; stroke:var(--dn-quill-down); stroke-width:.35; stroke-linecap:round}\n.dn-quill-engraving{fill:none; stroke:var(--dn-metal-lo); stroke-width:.3}\n.dn-quill-hole{fill:var(--dn-metal-lo)}\n.dn-quill-shine{fill:#fff; opacity:.2; animation:dn-quill-shine 2.8s ease-in-out infinite}\n.dn-quill-glint{fill:#fff; opacity:0; animation:dn-quill-glint 2.8s ease-in-out infinite}\n.dn-quill[data-focused=\"false\"]{opacity:.4; animation:none}\n.dn-quill[data-focused=\"false\"] .dn-quill-sway,\n.dn-quill[data-focused=\"false\"] .dn-quill-shine,\n.dn-quill[data-focused=\"false\"] .dn-quill-glint{animation:none}\n@keyframes dn-quill-breathe{from{opacity:1} to{opacity:.62}}\n@keyframes dn-quill-sway{from{transform:rotate(-1.6deg)} to{transform:rotate(1.6deg)}}\n@keyframes dn-quill-shine{0%{transform:translateY(0)} 100%{transform:translateY(-46px)}}\n@keyframes dn-quill-glint{\n  0%,72%{opacity:0}\n  80%{opacity:.9}\n  88%{opacity:.15}\n  100%{opacity:0}\n}\n\n/* ── 缮写室 Studio：一张悬在桌上的深色玻璃面板 ─────────────────────────── */\n.dn-studio{\n  position:fixed; z-index:40; top:52px; right:18px;\n  width:296px; max-height:calc(100% - 88px); overflow-y:auto;\n  padding:16px 18px 18px;\n  border:1px solid rgba(176,138,74,.35);\n  border-radius:12px;\n  background:rgba(22,16,12,.9);\n  backdrop-filter:blur(12px);\n  box-shadow:0 24px 60px -20px rgba(0,0,0,.8);\n  color:#f1e6cf;\n  font-family:var(--font-ui);\n  display:none;\n}\n.dn-studio[data-open=\"true\"]{display:block}\n.dn-studio .eyebrow{\n  font-variant:small-caps; letter-spacing:.2em; font-size:11px;\n  color:rgba(241,230,207,.62);\n}\n.dn-studio h2{\n  margin:0 0 10px;\n  font-family:var(--font-display); font-style:italic; font-weight:500;\n  font-size:23px; line-height:1.2; text-wrap:balance;\n}\n.dn-studio .group{\n  margin-top:13px; padding-top:11px;\n  border-top:1px solid rgba(176,138,74,.28);\n  display:grid; gap:9px;\n}\n.dn-studio .group h3{\n  margin:0; font-weight:500; font-style:italic; font-size:16px;\n}\n.dn-studio .grid{display:grid; grid-template-columns:repeat(3, 1fr); gap:5px}\n.dn-studio .grid.two{grid-template-columns:repeat(2, 1fr)}\n.dn-studio button.choice{\n  padding:5px 4px 6px;\n  border:1px solid rgba(176,138,74,.3); border-radius:6px;\n  background:transparent; color:#f1e6cf;\n  font-family:var(--font-ui); font-size:12.5px; line-height:1.2;\n  cursor:pointer; display:grid; gap:4px; justify-items:stretch;\n}\n.dn-studio button.choice[aria-pressed=\"true\"]{\n  border-color:#b08a4a;\n  box-shadow:inset 0 0 0 1px #b08a4a;\n}\n.dn-studio button.choice:focus-visible{outline:1px dotted #b08a4a; outline-offset:2px}\n.dn-studio .swatch{\n  height:20px; border-radius:3px;\n  box-shadow:inset 0 0 0 1px rgba(0,0,0,.35);\n}\n.dn-studio .slider{display:grid; gap:2px}\n.dn-studio .head{display:flex; justify-content:space-between; align-items:center}\n.dn-studio .label,\n.dn-studio .value{\n  font-family:var(--dsh-font-family-code, ui-monospace, monospace); font-size:10.5px;\n  letter-spacing:.14em; text-transform:uppercase;\n  color:rgba(241,230,207,.62); font-variant-numeric:tabular-nums;\n}\n.dn-studio .value{color:#f1e6cf; letter-spacing:.04em}\n.dn-studio input[type=\"range\"]{\n  -webkit-appearance:none; appearance:none;\n  width:100%; height:16px; margin:0; cursor:pointer; background:\n    linear-gradient(rgba(241,230,207,.62), rgba(241,230,207,.62)) 0 50% / 100% 1px no-repeat,\n    repeating-linear-gradient(90deg, rgba(241,230,207,.62) 0 1px, transparent 1px 10%) 0 50% / 100% 8px no-repeat;\n}\n.dn-studio input[type=\"range\"]::-webkit-slider-thumb{\n  -webkit-appearance:none; width:9px; height:16px; border-radius:2px;\n  border:1px solid #5e431c;\n  background:linear-gradient(90deg, #f3dca4, #b8904c 55%, #5e431c);\n  box-shadow:0 1px 3px rgba(0,0,0,.5);\n}\n.dn-studio input[type=\"range\"]:focus-visible{outline:1px dotted #b08a4a; outline-offset:3px}\n.dn-studio .switch{display:flex; justify-content:space-between; align-items:center}\n.dn-studio .toggle{\n  position:relative; width:36px; height:19px; flex:none;\n  border-radius:10px; border:1px solid rgba(176,138,74,.3);\n  background:transparent; cursor:pointer; padding:0;\n}\n.dn-studio .toggle::after{\n  content:\"\"; position:absolute; top:2px; left:2px;\n  width:13px; height:13px; border-radius:50%;\n  background:rgba(241,230,207,.62);\n  transition:transform 140ms ease;\n}\n.dn-studio .toggle[aria-checked=\"true\"]{border-color:#b08a4a; background:rgba(255,215,154,.12)}\n.dn-studio .toggle[aria-checked=\"true\"]::after{\n  transform:translateX(17px);\n  background:radial-gradient(circle at 35% 35%, #f3dca4, #b8904c 60%, #5e431c);\n}\n.dn-studio button.reset{\n  width:100%; padding:6px 8px;\n  border:1px solid rgba(176,138,74,.45); border-radius:6px;\n  background:rgba(255,215,154,.1); color:#f3dca4;\n  font-family:var(--font-ui); font-size:13px; cursor:pointer;\n}\n.dn-studio button.reset:hover{background:rgba(255,215,154,.18)}\n.dn-studio button.reset:focus-visible{outline:1px dotted #b08a4a; outline-offset:2px}\n.dn-studio .note{\n  margin:0; font-size:12px; line-height:1.5;\n  color:rgba(241,230,207,.55);\n}\n.dn-studio .close{\n  position:absolute; top:10px; right:10px;\n  width:22px; height:22px; display:grid; place-items:center;\n  border:1px solid transparent; border-radius:5px;\n  background:transparent; color:rgba(241,230,207,.62);\n  font-size:15px; line-height:1; cursor:pointer;\n}\n.dn-studio .close:hover{color:#f1e6cf; border-color:rgba(176,138,74,.4)}\n\n/* 右下角那个把手：平时很淡，悬停才亮起来 */\n.dn-handle{\n  position:fixed; z-index:39; right:18px; bottom:16px;\n  display:flex; align-items:center; gap:7px;\n  padding:7px 11px;\n  border:1px solid rgba(176,138,74,.32); border-radius:8px;\n  background:rgba(22,16,12,.9); backdrop-filter:blur(12px);\n  color:rgba(241,230,207,.66);\n  font-family:var(--dsh-font-family-code, ui-monospace, monospace); font-size:10.5px;\n  letter-spacing:.16em; text-transform:uppercase;\n  cursor:pointer; opacity:.4;\n  transition:opacity 200ms ease;\n}\n.dn-handle:hover,.dn-handle:focus-visible{opacity:1}\n.dn-handle[aria-expanded=\"true\"]{opacity:0; pointer-events:none}\n.dn-handle:focus-visible{outline:1px dotted #b08a4a; outline-offset:2px}\n.dn-handle svg{width:13px; height:13px; fill:none; stroke:currentColor; stroke-width:1.3; stroke-linecap:round}\n\n@media (max-width:720px){\n  .dn-studio{left:14px; right:14px; width:auto; top:auto; bottom:62px; max-height:52%}\n}\n@media (prefers-reduced-motion:reduce){\n  .dn-quill,.dn-quill-sway,.dn-quill-shine,.dn-quill-glint{animation:none}\n  .dn-handle,.dn-studio .toggle::after{transition:none}\n}\n\n\n/* ── 纸夹：一枚 Gem 夹夹在纸的右缘 ────────────────────────────────────\n   外圈在纸前，内舌在纸后（只留下压住纸面的一道痕），弯头探出纸外。\n   金属丝按\"上左受光\"的管状上色：暗边 + 本体 + 沿光侧的高光。 */\n/* 不挂 will-change:transform：纸夹一帧最多动几像素，不值得在这么重的界面里\n   常驻一个合成层。滚动位置由 rAF 直接写 transform，已经够顺。 */\n.dn-scroll{\n  position:fixed; left:0; top:0;\n  touch-action:none; cursor:grab;\n}\n.dn-scroll[hidden]{ display:none }\n.dn-scroll:active{ cursor:grabbing }\n.dn-scroll:focus-visible{ outline:1px dotted var(--dn-metal, #b8904c); outline-offset:3px }\n.dn-scroll-clip svg{ display:block; width:100%; height:100%; overflow:visible }\n.dn-scroll-clip path{ fill:none; stroke-linecap:round; stroke-linejoin:round }\n.dn-clip-edge{ stroke-width:3.3 }\n.dn-clip-body{ stroke-width:2.6 }\n.dn-clip-light{ stroke-width:.9; opacity:.9 }\n.dn-clip-glint{ stroke:#fff; stroke-width:.55; stroke-dasharray:1.6 11 .8 17; opacity:.85 }\n.dn-clip-shadow{ stroke:rgba(28,18,8,.42); stroke-width:3; transform:translate(1px,1.9px) }\n.dn-clip-pressed{ stroke:rgba(40,28,16,.07); stroke-width:2.2 }\n.dn-scroll[data-appearance=\"dark\"] .dn-clip-shadow{ stroke:rgba(0,0,0,.62) }\n.dn-scroll[data-appearance=\"dark\"] .dn-clip-pressed{ stroke:rgba(255,255,255,.05) }\n.dn-scroll-bar{\n  border-radius:999px;\n  background:rgba(255,255,255,.92);\n  box-shadow:0 0 0 1px rgba(0,0,0,.08), 0 2px 6px rgba(0,0,0,.25);\n}\n.dn-scroll[data-appearance=\"dark\"].dn-scroll-bar{ background:rgba(255,255,255,.75) }\n\n/* 容器的原生滚条让位给纸夹；滚轮、键盘、拖动都还在。 */\n[data-dn-scroll=\"custom\"]{ scrollbar-width:none; -ms-overflow-style:none }\n[data-dn-scroll=\"custom\"]::-webkit-scrollbar{ width:0; height:0 }\n";
 
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -2202,12 +1850,12 @@ const STORE_VERSION = 1;
 const REMOTE_PATH = '/dsh-nocturne/settings';
 const SETTING_KEYS = ['paper', 'theme', 'lamp', 'enabled', 'intensity', 'spread', 'beam', 'aim',
   'reach', 'softness', 'grain', 'cursorGlow', 'paperIllumination', 'particles', 'texture',
-  'cursorMode', 'coexist', 'selectionStyle', 'selectionWash', 'selectionAlpha'];
+  'cursorMode', 'coexist'];
 /** 会被本插件改写、卸载时必须逐项还原的 token。 */
 const TOKEN_NAMES = ['--dsw-alias-bg-base', '--dsw-alias-bg-module-platform', '--dsw-alias-bg-layer-1',
   '--dsw-alias-bg-layer-2', '--dsw-alias-label-primary', '--dsw-alias-label-secondary',
   '--dsw-alias-label-tertiary', '--dn-paper', '--dn-ink', '--dn-caret-ink', '--dn-light-rgb',
-  '--dn-metal-lo', '--dn-metal-hi', '--dn-metal', '--dn-sheet', '--dn-wash'];
+  '--dn-metal-lo', '--dn-metal-hi', '--dn-metal', '--dn-sheet'];
 let remoteTimer = 0;
 let lastDiag = null;
 /** 卡顿记录：只留最后 12 条，随设置文档一起落盘，用来在拿不到界面时定位卡死。 */
@@ -2236,8 +1884,6 @@ function normalize() {
   if (!THEMES[SETTINGS.theme]) SETTINGS.theme = 'paper-and-ink';
   if (['ink', 'quill', 'none'].indexOf(SETTINGS.cursorMode) < 0) SETTINGS.cursorMode = 'ink';
   if (['auto', 'material', 'full'].indexOf(SETTINGS.coexist) < 0) SETTINGS.coexist = 'auto';
-  if (['ink', 'classic'].indexOf(SETTINGS.selectionStyle) < 0) SETTINGS.selectionStyle = 'ink';
-  SETTINGS.selectionAlpha = Math.min(1.5, Math.max(0, Number(SETTINGS.selectionAlpha) || 1));
   const bar = SETTINGS.scrollbar;
   if (['clip', 'bar', 'native'].indexOf(bar.style) < 0) bar.style = 'clip';
   if (!CLIP_FINISHES[bar.finish]) bar.finish = 'silver';
@@ -2386,8 +2032,7 @@ function tokenMap(p) {
     '--dn-metal': '#b8904c',
     // 纸的底色：整窗背景挂在它上面，卸载/让位时一并还原
     '--dn-sheet': p.paper,
-    // 选区的洗色：classic 口径直接用它，墨水口径画布也用同一份，两处不会走样
-    '--dn-wash': washColor()
+
   };
 }
 
@@ -2402,7 +2047,6 @@ function applyTokens() {
     const p = paper();
     const root = document.documentElement.style;
     root.setProperty('--dn-sheet', 'transparent');
-    root.setProperty('--dn-wash', washColor());
     for (const name of ['--dn-paper', '--dn-ink', '--dn-caret-ink', '--dn-metal-lo', '--dn-metal-hi', '--dn-metal']) {
       root.setProperty(name, {
         '--dn-paper': p.paper,
@@ -2449,11 +2093,7 @@ function mount() {
   const caret = new InkCaret();
   caret.mount(paperCanvas);
 
-  // 选区画在纸光之下（所以灯会把选区一起照亮），纸夹压在纸光之上（它是一件器物）。
-  const selectionInk = new SelectionInk();
-  // z-index 与羽毛笔一样只取 1：实测把选区画布推到 2×10^9 那一档，Chromium 会把它
-  // 排出混合组（洋红整块消失）。见 docs/nocturne.md §4.11。
-  selectionInk.mount({zIndex: 1, before: paperCanvas});
+  // 纸夹压在纸光之上：它是一件器物，不该被灯压暗。
   const scrollClip = new ScrollClip();
   scrollClip.mount({zIndex: 2147482003});
 
@@ -2486,7 +2126,6 @@ function mount() {
       needsBuild = false;
       needsLight = true;
       rebuiltThisFrame = true;
-      selectionInk.resize();
     }
     scrollClip.needLayout = true;
   }
@@ -2550,8 +2189,7 @@ function mount() {
     lastCaretPoint = caretPoint ? {x: caretPoint.x, y: caretPoint.y} : null;
     cursorMovedThisFrame = false;
 
-    // 选区与纸夹：两者都自带脏标记，静止时只花一次比较。
-    selectionInk.sync(now);
+    // 纸夹自带脏标记：静止时只花一次比较。
     scrollClip.step(now);
 
     // 根元素的 custom property 一改，整篇文档的样式都要重算——只在真的变了才写。
@@ -2593,10 +2231,7 @@ function mount() {
   const observer = new ResizeObserver(reposition);
   observer.observe(document.documentElement);
 
-  const onSelection = () => {
-    needsLight = true;
-    selectionInk.mark();
-  };
+  const onSelection = () => { needsLight = true; };
   // 页面看不见时停掉循环：一张一直重算的纸，在后台没人看，白烧电。
   const onVisibility = () => {
     if (document.hidden) {
@@ -2684,9 +2319,6 @@ function mount() {
       dnPaper: getComputedStyle(document.documentElement).getPropertyValue('--dn-paper').trim(),
       canvases: document.querySelectorAll('canvas[' + PAPER_ATTR + ']').length,
       caret: caret.shown ? caret.mode : 'hidden',
-      // 选区与纸夹的实际状态：桌面版拿不到控制台，这两项只能靠落盘自检来验。
-      selection: selectionInk.mode,
-      selectionCells: selectionInk.cells.length,
       scroll: {
         style: SETTINGS.scrollbar.style,
         attached: Boolean(scrollClip.target),
@@ -2717,7 +2349,6 @@ function mount() {
         // 标定值：与样张同一份 NOCTURNE_DEFAULTS，两边不会各有一组"默认"。
         Object.assign(SETTINGS, JSON.parse(JSON.stringify(NOCTURNE_DEFAULTS)));
         caret.setMode(SETTINGS.cursorMode);
-        selectionInk.setMode(SETTINGS.selectionStyle);
         scrollClip.apply();
         applyTokens();
         studio.sync();
@@ -2735,7 +2366,6 @@ function mount() {
       if (key === 'paper') {
         SETTINGS.paper = value;
         applyTokens();
-        selectionInk.setMode(SETTINGS.selectionStyle);
         needsBuild = true;
         caret.hide();
         studio.sync();
@@ -2745,8 +2375,6 @@ function mount() {
       }
       if (key === 'theme') {
         SETTINGS.theme = value;
-        // 洗色取自主题，换房就得重新写一遍 token。
-        applyTokens();
         needsBuild = true;
         studio.sync();
         persist();
@@ -2763,20 +2391,6 @@ function mount() {
       if (key === 'lamp') {
         SETTINGS.lamp = value;
         needsLight = true;
-        persist();
-        return;
-      }
-      if (key === 'selectionStyle') {
-        SETTINGS.selectionStyle = value;
-        selectionInk.setMode(value);
-        studio.sync();
-        persist();
-        return;
-      }
-      if (key === 'selectionAlpha') {
-        SETTINGS.selectionAlpha = value;
-        applyTokens();
-        studio.sync();
         persist();
         return;
       }
@@ -2802,7 +2416,6 @@ function mount() {
   document.body.appendChild(studio.element);
   document.body.appendChild(studio.handle);
   caret.setMode(SETTINGS.cursorMode);
-  selectionInk.setMode(SETTINGS.selectionStyle);
   scrollClip.apply();
   applyTokens();
 
@@ -2810,7 +2423,6 @@ function mount() {
   loadRemote().then((loaded) => {
     if (!loaded || stopped) return;
     caret.setMode(SETTINGS.cursorMode);
-    selectionInk.setMode(SETTINGS.selectionStyle);
     scrollClip.apply();
     applyTokens();
     studio.sync();
@@ -2839,14 +2451,6 @@ function mount() {
     lamp(on) { SETTINGS.lamp = on !== false; persist(); needsLight = true; },
     /** 关掉墨迹光标：宿主自己的光标立刻回来（caret-color 会被还原）。 */
     caret(on) { caret.enabled = on !== false; if (!caret.enabled) caret.hide(); return caret.enabled; },
-    /** 选区口径：'ink' 墨水溶解 / 'classic' 平涂高亮。 */
-    select(mode) {
-      SETTINGS.selectionStyle = mode === 'classic' ? 'classic' : 'ink';
-      selectionInk.setMode(SETTINGS.selectionStyle);
-      studio.sync();
-      persist();
-      return SETTINGS.selectionStyle;
-    },
     /** 滚条形态：'clip' 纸夹 / 'bar' 细杆 / 'native' 原生。 */
     scroll(style) {
       SETTINGS.scrollbar.style = ['clip', 'bar', 'native'].indexOf(style) < 0 ? 'clip' : style;
@@ -2858,20 +2462,8 @@ function mount() {
     /** 选区与纸夹的实时状态：桌面版没有控制台，这是唯一能问的地方。 */
     state() {
       return {
-        selection: selectionInk.mode,
-        cells: selectionInk.cells.length,
-        wash: selectionInk.wash.length,
-        live: selectionInk.live,
         clip: scrollClip.element ? scrollClip.element.style.transform : null,
-        target: scrollClip.target ? String(scrollClip.target.className).slice(0, 40) : null,
-        ink: selectionInk.inkEls.length,
-        first: selectionInk.inkEls[0]
-          ? {
-            char: selectionInk.inkEls[0].el.textContent.slice(-1),
-            at: selectionInk.inkEls[0].el.style.left + ',' + selectionInk.inkEls[0].el.style.top
-          }
-          : null,
-        layer: selectionInk.layer ? getComputedStyle(selectionInk.layer).zIndex : null
+        target: scrollClip.target ? String(scrollClip.target.className).slice(0, 40) : null
       };
     },
     /** 纸上有什么在滚动：查不到滚动容器时用它诊断。 */
@@ -2904,7 +2496,6 @@ function mount() {
     paperCanvas.removeEventListener('webglcontextlost', onContextLost);
     paperCanvas.removeEventListener('webglcontextrestored', onContextRestored);
     caret.destroy();
-    selectionInk.destroy();
     scrollClip.destroy();
     paperLight.release();
     glow.clear();

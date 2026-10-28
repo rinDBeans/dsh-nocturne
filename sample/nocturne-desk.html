@@ -29,8 +29,6 @@
   --border-strong:rgba(42,32,25,.30);
   --cursor:#3a2c20;
   --selection:rgba(52,64,112,.20);
-  /* 盖纸用的纸色：换纸时跟着 --paper 走；插件里由构建脚本换成 --dn-paper。 */
-  --sel-paper:var(--paper);
   --light-rgb:255 210 154;
   --vignette:.42;
   --dn-metal-lo:#5e431c;
@@ -479,72 +477,14 @@ tr:last-child td{border-bottom:0}
 /*<<< caret-css */
 
 /*>>> shared-css */
-/* ── 选区：墨水溶解（上游 selection-layer.ts 的 DOM 版） ────────────────
-   ink    ：原生的平涂高亮隐去，改成洗色 + 逐字化开的墨
-   classic：留浏览器的平涂高亮，只是把颜色换成主题的选色 */
-html[data-dn-sel="ink"] ::selection{ background:transparent !important }
-html[data-dn-sel="classic"] ::selection{ background:var(--wash); color:inherit }
-html[data-dn-sel="classic"]::-moz-selection{ background:var(--wash); color:inherit }
-
-/* 选区层：铺在正文之上、纸光之下——z-index 与羽毛笔同档，所以灯会把洗色一起照亮，
-   洗色才像洇进纸里的墨，而不是浮在纸上的一块色片。
-   动画全部交给 CSS：拖动时主线程不必逐帧画。 */
-.dn-select{ position:fixed; left:0; top:0; z-index:1; pointer-events:none; overflow:visible }
-.dn-sel-wash{
-  position:absolute; display:block;
-  border-radius:9px;
-  background:var(--wash);
-  box-shadow:0 0 6px var(--wash);
-}
-.dn-sel{
-  position:absolute; display:block; white-space:pre; overflow:visible;
-  transform-origin:50% 50%;
-}
-/* 盖纸：先把这一格的字压住，末段再让开。
-   四周要出血 1–2px：字母的墨会溢出它的字宽盒子，恰好不外扩就会在格边留下
-   一道原字的竖缝，远看像"重影"。上游按格子画、格子比字宽，所以没这个问题。 */
-.dn-sel-cover{
-  position:absolute; inset:-1px -2px;
-  background:var(--sel-paper);
-  opacity:0;
-  animation:dn-sel-cover 680ms ease-in-out both;
-}
-/* 墨：放大、虚化、淡到 15%，再聚拢复原。三段比例照上游 30 / 50 / 70。 */
-.dn-sel-ink{
-  position:relative; display:block; white-space:pre;
-  font:inherit; color:inherit;
-  animation:dn-sel-ink 680ms ease-in-out both;
-}
-/* 三点墨：靠一个伪元素的 box-shadow 画出三颗，随 transform 一起散开又回来。 */
-.dn-sel-ink::after{
-  content:""; position:absolute; left:50%; top:50%;
-  width:1.4px; height:1.4px; margin:-.7px 0 0 -.7px;
-  border-radius:50%; background:currentColor;
-  box-shadow:7px 2px 0 currentColor, -5px 6px 0 currentColor, 2px -7px 0 currentColor;
-  opacity:0;
-  animation:dn-sel-speck 680ms ease-in-out both;
-  /* 三点墨跟着本字的错峰走：animation 不自继承，但伪元素可以从宿主元素继承这个值。 */
-  animation-delay:inherit;
-}
-@keyframes dn-sel-cover{ 0%{opacity:0} 30%{opacity:1} 70%{opacity:1} 100%{opacity:0} }
-@keyframes dn-sel-ink{
-  0%{transform:scale(1); filter:blur(0); opacity:1}
-  50%{transform:scale(1.18); filter:blur(5px); opacity:.15}
-  100%{transform:scale(1); filter:blur(0); opacity:1}
-}
-@keyframes dn-sel-speck{
-  0%{transform:scale(0); opacity:0}
-  50%{transform:scale(1); opacity:.55}
-  100%{transform:scale(0); opacity:0}
-}
-@media (prefers-reduced-motion:reduce){ .dn-sel{ display:none } }
-
 /* ── 纸夹：一枚 Gem 夹夹在纸的右缘 ────────────────────────────────────
    外圈在纸前，内舌在纸后（只留下压住纸面的一道痕），弯头探出纸外。
    金属丝按"上左受光"的管状上色：暗边 + 本体 + 沿光侧的高光。 */
+/* 不挂 will-change:transform：纸夹一帧最多动几像素，不值得在这么重的界面里
+   常驻一个合成层。滚动位置由 rAF 直接写 transform，已经够顺。 */
 .dn-scroll{
   position:fixed; left:0; top:0;
-  touch-action:none; cursor:grab; will-change:transform;
+  touch-action:none; cursor:grab;
 }
 .dn-scroll[hidden]{ display:none }
 .dn-scroll:active{ cursor:grabbing }
@@ -783,10 +723,6 @@ const SETTINGS = {
   coexist:'auto',
   // 滚条：上游三形态（纸夹 / 细杆 / 原生），纸夹另有四种金属
   scrollbar:{style:'clip', finish:'silver', barWidth:6, barOpacity:.45},
-  // 选区：ink = 墨水溶解（逐字化开）；classic = 平涂高亮
-  selectionStyle:'ink',
-  selectionWash:'',
-  selectionAlpha:1,
   // 窗光自成一组：上游的 Studio 里窗格数、斜度、柔边都是独立参数，
   // 不能借台灯的 softness（借了就是一团糊，达不到截图里那种 3×2 的方窗）。
   window:{x:.5, y:.5, columns:3, rows:2, softness:.15, slant:0}
@@ -1889,10 +1825,6 @@ const STUDIO_CURSORS = [
   {id: 'quill', name: '羽毛'},
   {id: 'none', name: '原生'}
 ];
-const STUDIO_SELECTIONS = [
-  {id: 'ink', name: '墨水溶解'},
-  {id: 'classic', name: '平涂高亮'}
-];
 const STUDIO_SCROLL = [
   {id: 'clip', name: '纸夹'},
   {id: 'bar', name: '细杆'},
@@ -1934,8 +1866,6 @@ function buildStudio(options) {
     + '<button class="toggle" type="button" role="switch" aria-checked="true" aria-label="台灯"></button></div></div>');
   part.push('<div class="group" data-group="sliders"></div>');
   part.push('<div class="group"><h3>光标</h3><div class="grid" data-group="cursor"></div></div>');
-  part.push('<div class="group"><h3>选区</h3><div class="grid two" data-group="selection"></div>'
-    + '<div data-group="selection-slider"></div></div>');
   part.push('<div class="group"><h3>滚条</h3><div class="grid" data-group="scroll"></div>'
     + '<div class="grid" data-group="finish" hidden></div>'
     + '<div data-group="bar-slider" hidden></div>'
@@ -1982,9 +1912,6 @@ function buildStudio(options) {
   for (const item of STUDIO_COEXIST) {
     groupOf('coexist').appendChild(choiceButton(item.id, item.name, null));
   }
-  for (const item of STUDIO_SELECTIONS) {
-    groupOf('selection').appendChild(choiceButton(item.id, item.name, null));
-  }
   for (const item of STUDIO_SCROLL) {
     groupOf('scroll').appendChild(choiceButton(item.id, item.name, null));
   }
@@ -2026,10 +1953,6 @@ function buildStudio(options) {
     });
   }
 
-  miniSlider(groupOf('selection-slider'), {
-    key: 'selectionAlpha', label: '洗色浓度', min: 0, max: 1.5, step: 0.05,
-    format: (v) => Math.round(v * 100) + '%', value: () => state.selectionAlpha
-  });
   miniSlider(groupOf('bar-slider'), {
     key: 'scrollBarWidth', label: '杆宽', min: 3, max: 14, step: 1,
     format: (v) => Math.round(v) + 'px', value: () => state.scrollbar.barWidth
@@ -2089,7 +2012,7 @@ function buildStudio(options) {
   // 组名不等于设置键：光标那组叫 cursor，设置里叫 cursorMode。
   const KEY_OF = {
     theme: 'theme', paper: 'paper', cursor: 'cursor', coexist: 'coexist',
-    selection: 'selectionStyle', scroll: 'scrollStyle', finish: 'scrollFinish'
+    scroll: 'scrollStyle', finish: 'scrollFinish'
   };
   root.addEventListener('click', (event) => {
     const button = event.target.closest('button.choice');
@@ -2120,7 +2043,6 @@ function buildStudio(options) {
     mark('paper', state.paper);
     mark('cursor', state.cursorMode);
     mark('coexist', state.coexist);
-    mark('selection', state.selectionStyle);
     mark('scroll', state.scrollbar.style);
     mark('finish', state.scrollbar.finish);
     // 金属只在"纸夹"下有意义，杆宽只在"细杆"下有意义——没有的项不显示。
@@ -2150,340 +2072,6 @@ function buildStudio(options) {
   sync();
 
   return {element: root, handle, sync};
-}
-
-/* ═══════════════════════════════════════════════════════════════════════════
-   5.8 · 选区：墨滴化开
-   上游（lib/nocturne/typewriter/selection-layer.ts）画的是终端里一格格字符。
-   这里的字在 DOM 里，所以同一套曲线要换一种量法：用 Range 逐字取矩形、用元素的
-   计算样式取墨色，再按"盖纸 → 散开 → 聚拢"三段，画在纸光之下——灯把选区和正文
-   一起照亮，这也正是上游把选区画在纸层之下的原因。
-
-   三个数字照搬上游：溶解 680ms、逐字错峰 7ms（封顶 320ms）、超过 900 格只给洗色。
-   ═══════════════════════════════════════════════════════════════════════ */
-const SELECT_DISSOLVE_MS = 680;
-const SELECT_STAGGER_MS = 7;
-const SELECT_MAX_STAGGER_MS = 320;
-const SELECT_MAX_ANIMATED = 900;
-const SELECT_MAX_BLURRED = 260;
-/** 一次选区变化最多量这么多个字：拖得比量得快时，宁可只给洗色，也不按住主线程。 */
-const SELECT_MEASURE_BUDGET = 96;
-/** 一次最多走这么多个文本节点：把最坏情况按住（长会话里那棵树是上万节点）。 */
-const SELECT_NODE_BUDGET = 600;
-
-const selectEase = (t) => {
-  const x = clamp(t, 0, 1);
-  return x * x * (3 - 2 * x);
-};
-
-/** 洗色 = 主题的选色 × 浓度。只改 rgba 最后那个 alpha，色相留给上游。 */
-function washColor() {
-  const source = SETTINGS.selectionWash || (theme() && theme().selection) || paper().selection;
-  const alpha = clamp(SETTINGS.selectionAlpha == null ? 1 : SETTINGS.selectionAlpha, 0, 1.5);
-  const match = /^rgba?\(([^)]+)\)$/.exec(String(source).trim());
-  if (!match) return source;
-  const parts = match[1].split(',').map((v) => v.trim());
-  if (parts.length < 3) return source;
-  const base = parts[3] === undefined ? 1 : Number(parts[3]);
-  return 'rgba(' + parts[0] + ', ' + parts[1] + ', ' + parts[2] + ', '
-    + clamp(base * alpha, 0, 1).toFixed(3) + ')';
-}
-
-/** 选区边界：用来算出"这次新进来的是哪一段"。 */
-function boundaryOf(range) {
-  return {
-    startNode: range.startContainer, startOffset: range.startOffset,
-    endNode: range.endContainer, endOffset: range.endOffset
-  };
-}
-
-class SelectionInk {
-  constructor() {
-    this.layer = null;
-    this.mode = 'ink';
-    this.live = false;
-    this.dirty = false;
-    this.prev = null;
-    this.wash = [];
-    this.washEls = [];
-    this.inkEls = [];
-    this.cells = [];
-    this.washKey = 'off';
-    this.timers = [];
-    /** 同一格只留一个：两次选区变化落在同一格时，旧的要先撤掉，否则会重复叠字。 */
-    this.byCell = new Map();
-    this.range = typeof Range === 'function' ? document.createRange() : null;
-  }
-
-  /**
-   * 挂载。用 DOM 而不是 canvas，是被实测逼出来的：
-   * 一块 2D 画布摆在带 mix-blend-mode 的纸层旁边时不参与合成（画布自己画满了、
-   * 取样也是对的，屏幕上就是没有），换成 DOM 元素一切正常。顺带还白捡一个好处：
-   * 动画交给合成器跑，拖动时主线程不用再多一份逐帧绘制的负担。
-   */
-  mount(options) {
-    const option = options || {};
-    const layer = document.createElement('div');
-    layer.className = 'dn-select';
-    layer.setAttribute('aria-hidden', 'true');
-    layer.style.zIndex = String(option.zIndex == null ? 1 : option.zIndex);
-    if (option.before && option.before.parentNode) {
-      option.before.parentNode.insertBefore(layer, option.before);
-    } else {
-      document.body.appendChild(layer);
-    }
-    this.layer = layer;
-    this.setMode(SETTINGS.selectionStyle);
-    return layer;
-  }
-
-  resize() {
-    // 层是全屏 fixed，自适应；这里只作废缓存，交给下一次选区变化重铺。
-    this.washKey = '';
-  }
-
-  setMode(mode) {
-    this.mode = mode === 'classic' ? 'classic' : 'ink';
-    document.documentElement.dataset.dnSel = this.mode;
-    if (this.mode !== 'ink') this.clear();
-  }
-
-  /** selectionchange 只留一个标记：拖动时一秒几十次，测量放到下一帧。 */
-  mark() {
-    this.dirty = true;
-  }
-
-  sync(now) {
-    if (this.dirty) {
-      this.dirty = false;
-      this.capture(now);
-    }
-    return this.inkEls.length > 0;
-  }
-
-  clear() {
-    for (const el of this.washEls) el.remove();
-    for (const item of this.inkEls) item.el.remove();
-    this.washEls = [];
-    this.inkEls = [];
-    this.cells = [];
-    this.wash = [];
-    if (this.byCell) this.byCell.clear();
-    this.live = false;
-    this.prev = null;
-    this.washKey = 'off';
-    for (const id of this.timers) clearTimeout(id);
-    this.timers = [];
-  }
-
-  capture(now) {
-    const selection = window.getSelection();
-    if (this.mode !== 'ink' || !selection || selection.rangeCount === 0 || selection.isCollapsed) {
-      if (this.live) this.clear();
-      return;
-    }
-    const range = selection.getRangeAt(0);
-    const host = range.commonAncestorContainer;
-    const holder = host.nodeType === 1 ? host : host.parentElement;
-    // 输入框里的选择交给原生：那块归墨迹光标管，两套不要撞在一起。
-    if (holder && holder.closest && holder.closest('input, textarea')) {
-      if (this.live) this.clear();
-      return;
-    }
-    this.live = true;
-    this.paintWash(range);
-    if (reduceMotion || !this.range) {
-      this.prev = boundaryOf(range);
-      return;
-    }
-    // 一次选中太多字只给洗色——上游也是这么退让的（MAX_ANIMATED）。
-    if (selection.toString().length > SELECT_MAX_ANIMATED) {
-      this.prev = boundaryOf(range);
-      return;
-    }
-    const delta = this.deltaOf(range);
-    this.prev = boundaryOf(range);
-    if (delta) this.dissolve(delta);
-  }
-
-  /** 洗色：每行一段，四周柔化，像一笔水彩从字后面洇出来。 */
-  paintWash(range) {
-    const rects = range.getClientRects();
-    const height = window.innerHeight;
-    const next = [];
-    let key = '';
-    for (let i = 0; i < rects.length; i++) {
-      const rect = rects[i];
-      if (!(rect.width > 0.6 && rect.height > 0.6)) continue;
-      if (rect.bottom < 0 || rect.top > height) continue;
-      next.push({left: rect.left, top: rect.top, width: rect.width, height: rect.height});
-      key += Math.round(rect.left) + ',' + Math.round(rect.top) + ',' + Math.round(rect.width) + ';';
-    }
-    key = key || 'empty';
-    if (key === this.washKey) return;
-    this.washKey = key;
-    for (const el of this.washEls) el.remove();
-    this.washEls = [];
-    this.wash = next;
-    for (const rect of next) {
-      const inset = rect.height * 0.12;
-      const el = document.createElement('i');
-      el.className = 'dn-sel-wash';
-      el.style.left = (rect.left - 1) + 'px';
-      el.style.top = (rect.top + inset) + 'px';
-      el.style.width = (rect.width + 2) + 'px';
-      el.style.height = (rect.height - inset * 2) + 'px';
-      el.style.borderRadius = (rect.height * 0.35) + 'px';
-      this.layer.appendChild(el);
-      this.washEls.push(el);
-    }
-  }
-
-  /** 新进来的那一段：选区从哪一头长大，就取那一头多出来的部分。 */
-  deltaOf(range) {
-    const prev = this.prev;
-    try {
-      if (!prev || !prev.startNode || !prev.startNode.isConnected
-        || !prev.endNode || !prev.endNode.isConnected) {
-        return range.cloneRange();
-      }
-      if (prev.startNode === range.startContainer && prev.startOffset === range.startOffset) {
-        const delta = document.createRange();
-        delta.setStart(prev.endNode, prev.endOffset);
-        delta.setEnd(range.endContainer, range.endOffset);
-        return delta.collapsed ? null : delta;
-      }
-      if (prev.endNode === range.endContainer && prev.endOffset === range.endOffset) {
-        const delta = document.createRange();
-        delta.setStart(range.startContainer, range.startOffset);
-        delta.setEnd(prev.startNode, prev.startOffset);
-        return delta.collapsed ? null : delta;
-      }
-      return range.cloneRange();
-    } catch (error) {
-      return null;
-    }
-  }
-
-  /** 逐字量出新进来的那一段，交给 CSS 去化开。 */
-  dissolve(delta) {
-    const looks = new Map();
-    const startNode = delta.startContainer;
-    const endNode = delta.endContainer;
-    const walker = document.createTreeWalker(delta.commonAncestorContainer, NodeFilter.SHOW_TEXT, null);
-    walker.currentNode = startNode;
-    const height = window.innerHeight;
-    const made = [];
-    let count = 0;
-    let visited = 0;
-    let node = startNode.nodeType === 3 ? startNode : null;
-    while (count < SELECT_MEASURE_BUDGET) {
-      if (!node) {
-        node = walker.nextNode();
-        if (!node) break;
-      }
-      const current = node;
-      node = null;
-      if (++visited > SELECT_NODE_BUDGET) break;
-      // 越过终点就停；起点之前的节点跳过（起点落在元素边界上时会遇到）。
-      if (!endNode.contains(current) && (endNode.compareDocumentPosition(current) & 4)) break;
-      if (!startNode.contains(current) && startNode !== current
-        && (startNode.compareDocumentPosition(current) & 2)) continue;
-      const from = current === startNode ? delta.startOffset : 0;
-      const to = current === endNode ? delta.endOffset : current.data.length;
-      if (to <= from) continue;
-      const holder = current.parentElement;
-      if (!holder) continue;
-      let look = looks.get(holder);
-      if (look === undefined) {
-        const computed = getComputedStyle(holder);
-        const hidden = computed.visibility === 'hidden' || computed.display === 'none'
-          || Number(computed.opacity) === 0;
-        look = hidden ? null : {
-          style: computed.fontStyle,
-          weight: computed.fontWeight,
-          size: computed.fontSize,
-          family: computed.fontFamily,
-          spacing: computed.letterSpacing,
-          color: computed.color
-        };
-        looks.set(holder, look);
-      }
-      if (!look) continue;
-      for (let i = from; i < to && count < SELECT_MEASURE_BUDGET; i++) {
-        const char = current.data[i];
-        if (!char || char.trim() === '') continue;
-        this.range.setStart(current, i);
-        this.range.setEnd(current, i + 1);
-        const rect = this.range.getBoundingClientRect();
-        if (!(rect.width > 0.4 && rect.height > 0.4)) continue;
-        if (rect.bottom < -40 || rect.top > height + 40) continue;
-        const delay = Math.min(SELECT_MAX_STAGGER_MS, count * SELECT_STAGGER_MS) + 'ms';
-        const el = document.createElement('span');
-        el.className = 'dn-sel';
-        el.style.left = rect.left + 'px';
-        el.style.top = rect.top + 'px';
-        el.style.width = rect.width + 'px';
-        el.style.height = rect.height + 'px';
-        el.style.fontFamily = look.family;
-        el.style.fontSize = look.size;
-        el.style.fontWeight = look.weight;
-        el.style.fontStyle = look.style;
-        // letter-spacing 是排版的一部分：少抄一格，后面每个字都会往下漂。
-        if (look.spacing && look.spacing !== 'normal') el.style.letterSpacing = look.spacing;
-        el.style.lineHeight = rect.height + 'px';
-        el.style.color = look.color;
-        el.style.animationDelay = delay;
-        el.dataset.cell = Math.round(rect.left) + ':' + Math.round(rect.top);
-        const cover = document.createElement('i');
-        cover.className = 'dn-sel-cover';
-        cover.style.animationDelay = delay;
-        const ink = document.createElement('b');
-        ink.className = 'dn-sel-ink';
-        ink.style.animationDelay = delay;
-        ink.textContent = char;
-        el.append(cover, ink);
-        // 这一格上一轮已经画过就先撤掉：重复的 span 会让字叠两层，
-        // 而且新盖纸会盖掉旧墨，看起来像缺字。
-        const key = Math.round(rect.left) + ':' + Math.round(rect.top);
-        const previous = this.byCell.get(key);
-        if (previous) {
-          previous.remove();
-          this.inkEls = this.inkEls.filter((item) => item.el !== previous);
-        }
-        this.layer.appendChild(el);
-        this.inkEls.push({el: el});
-        this.byCell.set(key, el);
-        made.push(el);
-        count += 1;
-      }
-    }
-    this.cells = made;
-    if (made.length) this.schedule(made);
-  }
-
-  /** 一批动画结束后统一回收：span 不能留在 DOM 里越积越多。 */
-  schedule(made) {
-    const life = SELECT_DISSOLVE_MS + SELECT_MAX_STAGGER_MS + 120;
-    const timer = setTimeout(() => {
-      for (const el of made) {
-        el.remove();
-        const key = el.dataset.cell;
-        if (key && this.byCell.get(key) === el) this.byCell.delete(key);
-      }
-      this.inkEls = this.inkEls.filter((item) => made.indexOf(item.el) < 0);
-      this.cells = this.inkEls.map((item) => item.el);
-      this.timers = this.timers.filter((id) => id !== timer);
-    }, life);
-    this.timers.push(timer);
-  }
-
-  destroy() {
-    document.documentElement.removeAttribute('data-dn-sel');
-    this.clear();
-    if (this.layer && this.layer.parentNode) this.layer.remove();
-    this.layer = null;
-  }
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -2918,21 +2506,11 @@ const inkCaret = new InkCaret();
 inkCaret.mount(paperCanvas);
 inkCaret.mode = SETTINGS.cursorMode;
 
-/** 选区：画布插在纸层之前，于是它躺在纸光之下——灯把选区和正文一起照亮。 */
-const selectionInk = new SelectionInk();
-selectionInk.mount({zIndex: 1, before: paperCanvas});
 
 /** 纸夹：夹在正文栏的右缘。样张里正文栏自己滚，所以挂上就有东西可夹。 */
 const scrollClip = new ScrollClip();
 scrollClip.mount({zIndex: 6, preferred: '.scroll'});
 
-/** 洗色＝主题的选色 × 浓度；classic 口径直接把它写进 --wash。 */
-function setWash() {
-  rootStyle.setProperty('--wash', washColor());
-}
-setWash();
-
-document.addEventListener('selectionchange', () => selectionInk.mark());
 
 function relayout() {
   const dpr = Math.min(2, window.devicePixelRatio || 1);
@@ -2950,7 +2528,6 @@ function relayout() {
     paperLight.build({width, height, pixelRatio: dpr, p: paper()});
     needsBuild = false;
     needsLight = true;
-    selectionInk.resize();
   }
   sheetOrigin = {left: rect.left, top: rect.top};
   scrollClip.needLayout = true;
@@ -3009,8 +2586,7 @@ function paintFrame(now) {
 
   rootStyle.setProperty('--light-rgb', lightChannels.join(' '));
 
-  // 选区先画（它在纸光之下），纸夹最后（它是压在纸上的器物）。
-  selectionInk.sync(now);
+  // 纸夹是压在纸上的器物，最后画。
   scrollClip.step(now);
 }
 
@@ -3024,8 +2600,6 @@ function applyPaper(id) {
   rootStyle.setProperty('--ink-faint', p.inkMuted);
   rootStyle.setProperty('--cursor', p.cursor);
   rootStyle.setProperty('--selection', p.selection);
-  selectionInk.setMode(SETTINGS.selectionStyle);
-  setWash();
   const dark = p.appearance === 'dark';
   rootStyle.setProperty('--border', dark ? 'rgba(230,225,234,.16)' : 'rgba(42,32,25,.16)');
   rootStyle.setProperty('--border-strong', dark ? 'rgba(230,225,234,.30)' : 'rgba(42,32,25,.30)');
@@ -3060,7 +2634,6 @@ function applyTheme(id) {
   rootStyle.setProperty('--gilt-soft', t.palette.accentSoft);
   rootStyle.setProperty('--gilt-text', t.appearance === 'dark' ? '#e3c48a' : '#6f5420');
   rootStyle.setProperty('--vignette', String(t.atmosphere.vignette));
-  setWash();
   rootStyle.setProperty('--light-rgb', toUnit(t.light.color).map((c) => Math.round(c * 255)).join(' '));
   if (studio) studio.sync();
   updateLeaf();
@@ -3089,9 +2662,7 @@ studio = buildStudio({
   onChange(key, value) {
     if (key === 'preset') {
       Object.assign(SETTINGS, JSON.parse(JSON.stringify(NOCTURNE_DEFAULTS)));
-      selectionInk.setMode(SETTINGS.selectionStyle);
       scrollClip.apply();
-      setWash();
       applyTheme(SETTINGS.theme);
       applyPaper(SETTINGS.paper);
       inkCaret.setMode(SETTINGS.cursorMode);
@@ -3113,18 +2684,6 @@ studio = buildStudio({
       SETTINGS.lamp = value;
       lampButton.setAttribute('aria-pressed', String(value));
       needsLight = true;
-      return;
-    }
-    if (key === 'selectionStyle') {
-      SETTINGS.selectionStyle = value;
-      selectionInk.setMode(value);
-      studio.sync();
-      return;
-    }
-    if (key === 'selectionAlpha') {
-      SETTINGS.selectionAlpha = value;
-      selectionInk.drawnKey = '';
-      setWash();
       return;
     }
     if (key === 'scrollStyle' || key === 'scrollFinish') {
