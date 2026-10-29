@@ -1,79 +1,69 @@
 # dsh-nocturne
 
-把 [Typewriter Nocturne](https://github.com/Chaosnap/Typewriter-Nocturne)（MIT）的**纸、灯与墨**
-搬进 DeepSeek Harness 的浏览器界面。不含拟物打字机。
+DeepSeek Harness 的 WebGL2 古典纸张与物理光影主题插件。
 
-不是换配色，是换渲染管线：一张 WebGL2 双通道着色器画出来的纸，盖在界面之上做 `multiply`，
-所以每一行字都被同一盏灯照着。
+通过 WebGL2 双 Pass 着色器在独立层计算纤维微观肌理与环境漫射光照，并以 `multiply` 混合模式覆于正文之上；文字排版、输入与会话交互保持 DSH 原生处理。
 
-## 装
+## 特性
+
+- **6 款纸张 × 3 组空间**：葱皮纸、棉浆纸、帘纹纸、亚麻纸、羊皮纸与夜纸，分别搭配 Paper & Ink、Midnight Study 和 Moonlit Poetry。
+- **严谨的交互避让**：随动墨迹与羽毛笔光标在中文输入法（IME）合成或拖选时自动退回原生光标；纸夹滚动条完整保留浏览器原生滚动物理。
+- **原生设置接入**：在 DSH 官方「设置 → 缮写室」中提供独立配置页，复用宿主 React，零额外运行时开销。
+- **多端与共存友好**：支持桌面端本地配置持久化（解决端口随机导致的 `localStorage` 丢失）；可与 `claude-style` 等主题按需选择共存模式。
+- **容灾与无障碍**：无 WebGL2 支持时平滑回退至静态纸色；动画粒子严格遵循系统的「减少动态效果」（`prefers-reduced-motion`）偏好。
+
+## 安装
+
+环境要求：DSH 0.2.x，Node.js 18+。
 
 ```bash
-node install.cjs --dry-run     # 看它要改哪些文件
-node install.cjs               # 装进 desktop 档案（--profile web 可换）
-# 重启 DSH
+cd packages/dsh-nocturne
+
+# 预检安装变更
+node install.cjs --dry-run
+
+# 执行安装
+node install.cjs
 ```
 
-撤：
+安装完成后重启 DSH。
+
+卸载：
 
 ```bash
 node install.cjs --revert
 ```
 
-装之前会备份 `package.json`。只改两处：`dependencies` 里加 `file:` 依赖、
-`dsh.profile.bundles` 里加本包名。装载条目由包自带的 `cordis.patch.yml` 提供。
+## 配置与控制台 API
 
-## 用
+打开 **设置 → 缮写室** 即可调整全部外观，修改即时生效并自动持久化。
 
-右下角有一枚「缮写室」把手，点开就是面板：房间三选一、纸六选一、台灯开关、
-灯强 / 光锥 / 柔边 / 颗粒 / 尘埃 / 纸纹深度六个滑杆、光标三态（墨迹 / 羽毛 / 原生）。
-选择写进 `localStorage`，下次启动沿用。
+亦可在开发者控制台通过全局对象 `__dshNocturne` 快速调试：
 
-面板与样张是同一个 `buildStudio()`，所以两处不会走样。控制台也还能用：
-
-```js
-__dshNocturne.use('cotton')        // onionskin | cotton | laid | linen | parchment | night
-__dshNocturne.use('parchment', {intensity: 1.35, grain: 0.25})   // 上游的 cinematic 灯预设
-__dshNocturne.theme('midnight-study')   // paper-and-ink | midnight-study | moonlit-poetry
-__dshNocturne.lamp(false)          // 关灯，只剩环境光
-__dshNocturne.off()                // 当场卸掉
+```javascript
+__dshNocturne.use('cotton');                                      // 切换纸张材质
+__dshNocturne.use('parchment', { intensity: 1.35, grain: 0.25 }); // 调光照强度与颗粒
+__dshNocturne.theme('midnight-study');                             // 切换环境光主题
+__dshNocturne.lamp(false);                                         // 临时关灯
+__dshNocturne.off();                                               // 暂时停用纸面渲染
 ```
 
-选择写进 `localStorage`，下次启动沿用。
+桌面端配置自动存入 `$DSH_HOME/cache/dsh-nocturne/settings.json`，浏览器端以 `localStorage` 作为回退。
 
-## 桌面版
+## 开发与构建
 
-桌面版每次启动端口随机，GUI 的 origin 跟着变，`localStorage` 会空。所以这个包带宿主半
-（`lib/index.js`）：设置落盘到 `$DSH_HOME/cache/dsh-nocturne/settings.json`，
-客户端启动时通过 `/dsh-nocturne/settings` 取回来，取不到才用本地缓存。
-宿主半没装（例如只拷了浏览器半）时会静默退回缓存，不会报错。
-
-## 与 dsh-claude-style 共存
-
-默认「自动」：探测到 claude-style 在覆盖同一批 `--dsw-alias-*`，就让位成**只叠材质**——
-保留它的配色与形状，只把纸与灯叠上去。想让它接管配色，缮写室里把「共存」切成「接管配色」。
-
-## 原理
-
-```
-两个 canvas 直接挂在 <body> 下（不能包带 z-index 的容器，会把 mix-blend-mode 关进隔离栈）
-  canvas[data-dn="paper"]  mix-blend-mode: multiply   ← albedo × irradiance
-  canvas[data-dn="glow"]   mix-blend-mode: screen     ← 光池 / 尘埃 / 灯焰 / 光标辉光
-配色走 --dsw-alias-* 覆盖，纸与墨的色值取自上游 papers.ts
-```
-
-灯挂在输入光标上（±30% 偏移），所以你打字时脚下那束光会跟着游走。
-
-## 改
-
-渲染核心**不在这个包里**。它由 `tools/build.mjs` 从 `sample/nocturne-desk.html` 抽取，
-所以样张和宿主永远不会走样。改渲染请改样张，然后：
+在仓库根目录下执行：
 
 ```bash
-node tools/build.mjs
+npm ci            # 安装开发依赖
+npm run build     # 重新生成客户端、宿主脚本及离线样张
+npm run check     # 产物一致性校验并执行完整回归测试
 ```
 
-## 许可
+渲染核心位于 `src/core/`，设置页位于 `src/settings-page.js`。完整文档参见仓库根目录 `README.md` 与 `docs/`。
 
-MIT。上游 Typewriter Nocturne © Chaosnap（含 Vercel / Hyper 的原始版权声明）。
-字体 EB Garamond、Cormorant Garamond、Courier Prime 为 SIL Open Font License 1.1。
+## 许可与鸣谢
+
+- 遵循 [MIT License](../../LICENSE)。
+- 纸张与光影配方移植自 [Typewriter Nocturne](https://github.com/Chaosnap/Typewriter-Nocturne)（MIT License，© Chaosnap）。
+- 字体 EB Garamond、Cormorant Garamond 与 Courier Prime 遵循 SIL Open Font License 1.1。

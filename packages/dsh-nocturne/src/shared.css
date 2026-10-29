@@ -1,0 +1,38 @@
+/* ── 选区：纸自己的颜色 ────────────────────────────────────────────────
+   不是系统那种蓝，也压不住系统的行为——只换背景色，拖动、复制、双击选词全归浏览器。
+   不加 !important：宿主若另有口径，让它赢。 */
+::selection{ background:var(--dn-selection, rgba(176,138,74,.28)); color:inherit }
+::-moz-selection{ background:var(--dn-selection, rgba(176,138,74,.28)); color:inherit }
+
+/* ── 纸夹：一枚 Gem 夹夹在纸的右缘 ────────────────────────────────────
+   外圈在纸前，内舌在纸后（只留下压住纸面的一道痕），弯头探出纸外。
+   金属丝按"上左受光"的管状上色：暗边 + 本体 + 沿光侧的高光。 */
+/* 不挂 will-change:transform：纸夹一帧最多动几像素，不值得在这么重的界面里
+   常驻一个合成层。滚动位置由 rAF 直接写 transform，已经够顺。 */
+.dn-scroll{
+  position:fixed; left:0; top:0;
+  touch-action:none; cursor:grab;
+}
+.dn-scroll[hidden]{ display:none }
+.dn-scroll:active{ cursor:grabbing }
+.dn-scroll:focus-visible{ outline:1px dotted var(--gilt); outline-offset:3px }
+.dn-scroll-clip svg{ display:block; width:100%; height:100%; overflow:visible }
+.dn-scroll-clip path{ fill:none; stroke-linecap:round; stroke-linejoin:round }
+.dn-clip-edge{ stroke-width:3.3 }
+.dn-clip-body{ stroke-width:2.6 }
+.dn-clip-light{ stroke-width:.9; opacity:.9 }
+.dn-clip-glint{ stroke:#fff; stroke-width:.55; stroke-dasharray:1.6 11 .8 17; opacity:.85 }
+.dn-clip-shadow{ stroke:rgba(28,18,8,.42); stroke-width:3; transform:translate(1px,1.9px) }
+.dn-clip-pressed{ stroke:rgba(40,28,16,.07); stroke-width:2.2 }
+.dn-scroll[data-appearance="dark"] .dn-clip-shadow{ stroke:rgba(0,0,0,.62) }
+.dn-scroll[data-appearance="dark"] .dn-clip-pressed{ stroke:rgba(255,255,255,.05) }
+.dn-scroll-bar{
+  border-radius:999px;
+  background:rgba(255,255,255,.92);
+  box-shadow:0 0 0 1px rgba(0,0,0,.08), 0 2px 6px rgba(0,0,0,.25);
+}
+.dn-scroll[data-appearance="dark"].dn-scroll-bar{ background:rgba(255,255,255,.75) }
+
+/* 容器的原生滚条让位给纸夹；滚轮、键盘、拖动都还在。 */
+[data-dn-scroll="custom"]{ scrollbar-width:none; -ms-overflow-style:none }
+[data-dn-scroll="custom"]::-webkit-scrollbar{ width:0; height:0 }

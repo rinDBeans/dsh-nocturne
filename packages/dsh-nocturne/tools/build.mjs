@@ -1,84 +1,107 @@
 #!/usr/bin/env node
-/**
- * 从样张抽取渲染核心，拼成 DSH 客户端插件。
- *
- * 单一真源：sample/nocturne-desk.html 的 <script> 里 1-5 节（数据 / 数学 / 灯 / 纸 / 辉光）。
- * 抽取而不是复制，是为了避免"样张好看、宿主走样"这种最常见的漂移。
- */
-import { readFileSync, writeFileSync, statSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
-import { dirname, join, relative } from 'node:path';
+/** 从同一组 ES 模块构建离线样张与 DSH 客户端；--check 只检查产物是否最新。 */
+import {readFileSync, writeFileSync, existsSync} from 'node:fs';
+import {fileURLToPath} from 'node:url';
+import {dirname, join, relative} from 'node:path';
+import {build} from 'esbuild';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const repo = join(here, '..', '..', '..');
-const samplePath = join(repo, 'sample', 'nocturne-desk.html');
-const adapterPath = join(here, '..', 'src', 'adapter.js');
-const stylePath = join(here, '..', 'src', 'style.css');
-const outPath = join(here, '..', 'lib', 'client.js');
+const pkg = join(here, '..');
+const check = process.argv.includes('--check');
+const paths = {
+  template: join(repo, 'sample', 'nocturne-desk.template.html'),
+  sampleEntry: join(repo, 'sample', 'nocturne-desk.js'),
+  sampleOut: join(repo, 'sample', 'nocturne-desk.html'),
+  clientEntry: join(pkg, 'src', 'client-entry.js'),
+  clientOut: join(pkg, 'lib', 'client.js'),
+  hostEntry: join(pkg, 'src', 'host.js'),
+  hostOut: join(pkg, 'lib', 'index.js'),
+  style: join(pkg, 'src', 'style.css'),
+  caret: join(pkg, 'src', 'caret.css'),
+  shared: join(pkg, 'src', 'shared.css'),
+  settingsStyle: join(pkg, 'src', 'settings-page.css'),
+  manifest: join(pkg, 'package.json')
+};
 
-const html = readFileSync(samplePath, 'utf8');
-const script = html.split('<script>')[1].split('</script>')[0];
-if (!script) throw new Error('sample 里没有找到 <script>');
+async function bundle(entryPoint, globalName, options = {}) {
+  const result = await build({
+    absWorkingDir: repo,
+    entryPoints: [entryPoint], bundle: true, write: false,
+    format: options.format || 'iife', globalName,
+    platform: options.platform || 'browser', target: options.target || 'es2020',
+    external: options.external || [],
+    charset: 'utf8', legalComments: 'inline', logLevel: 'silent'
+  });
+  return result.outputFiles[0].text.trimEnd();
+}
 
-const marker = '6 · 装配与主循环';
-const at = script.indexOf(marker);
-if (at < 0) throw new Error('找不到 1-5 节与第 6 节的分界');
-const cut = script.lastIndexOf('/*', at);
-const core = script.slice(0, cut).trimEnd();
+function replaceRequired(source, marker, value) {
+  if (!source.includes(marker)) throw new Error('模板缺少占位符：' + marker);
+  return source.replace(marker, () => value);
+}
 
-const adapter = readFileSync(adapterPath, 'utf8').trimEnd();
-const css = readFileSync(stylePath, 'utf8');
+function emit(file, content) {
+  const normalized = content.endsWith('\n') ? content : content + '\n';
+  if (check) {
+    if (!existsSync(file) || readFileSync(file, 'utf8') !== normalized) {
+      throw new Error('产物不是最新：' + relative(repo, file));
+    }
+    console.log('✓ ' + relative(repo, file));
+    return;
+  }
+  if (existsSync(file) && readFileSync(file, 'utf8') === normalized) {
+    console.log('= ' + relative(repo, file) + '（无变化）');
+    return;
+  }
+  writeFileSync(file, normalized, 'utf8');
+  console.log('✓ ' + relative(repo, file) + '（' + Buffer.byteLength(normalized) + ' bytes）');
+}
 
-// 墨迹光标的样式只在样张里维护一份，构建时抽过来，避免两处各写一套。
-const caretMatch = html.match(/\/\*>>> caret-css \*\/([\s\S]*?)\/\*<<< caret-css \*\//);
-if (!caretMatch) throw new Error('样张里的 caret-css 标记变了');
-const caretCss = caretMatch[1]
-  .replace('z-index:1;', 'z-index: 2147481999;')                    // 压在纸光之下，但高于宿主界面
+const [clientBundle, sampleBundle, hostBundle] = await Promise.all([
+  bundle(paths.clientEntry, '__DshNocturneModule', {external: ['react']}),
+  bundle(paths.sampleEntry, '__NocturneSample'),
+  bundle(paths.hostEntry, undefined, {platform: 'node', format: 'esm', target: 'node18'})
+]);
+const caretCss = readFileSync(paths.caret, 'utf8')
+  .replace(/\/\*>>> studio-css \*\/[\s\S]*?\/\*<<< studio-css \*\//g, '')
+  .replace('z-index:1;', 'z-index: 2147481999;')
   .replaceAll('var(--cursor)', 'var(--dn-caret-ink, #3a2c20)')
   .replaceAll('var(--paper)', 'var(--dsw-alias-bg-base, #efdfbd)')
   .replaceAll('var(--font-mono)', 'var(--dsh-font-family-code, ui-monospace, monospace)');
-
-// 纸夹的样式同样只在样张里维护一份，抽过来时把样张的变量名换成插件自己的。
-const sharedMatch = html.match(/\/\*>>> shared-css \*\/([\s\S]*?)\/\*<<< shared-css \*\//);
-if (!sharedMatch) throw new Error('样张里的 shared-css 标记变了');
-const sharedCss = sharedMatch[1]
+const sharedCss = readFileSync(paths.shared, 'utf8')
   .replaceAll('var(--gilt)', 'var(--dn-metal, #b8904c)');
+const cssText = readFileSync(paths.style, 'utf8') + '\n' + caretCss + '\n' + sharedCss
+  + '\n' + readFileSync(paths.settingsStyle, 'utf8');
+const version = JSON.parse(readFileSync(paths.manifest, 'utf8')).version;
 
-const cssLiteral = 'const CSS_TEXT = ' + JSON.stringify(css + '\n' + caretCss + '\n' + sharedCss) + ';';
-// 版本号从 package.json 注入：自检里带上它，才能确认宿主跑的是哪一版。
-const version = JSON.parse(readFileSync(join(here, '..', 'package.json'), 'utf8')).version;
+const client = [
+  '/**',
+  ' * dsh-nocturne — 浏览器半。由 ES 模块构建，请勿直接编辑。',
+  ' * 上游配方来自 Chaosnap/Typewriter-Nocturne（MIT）。',
+  ' */',
+  'window.__ModuleLoader__.load({',
+  "  id: 'dsh-nocturne',",
+  '  factory: (require) => {',
+  '    var module = { exports: {} };',
+  '    var exports = module.exports;',
+  '    const CSS_TEXT = ' + JSON.stringify(cssText) + ';',
+  '    const DN_VERSION = ' + JSON.stringify(version) + ';',
+  '',
+  clientBundle,
+  '',
+  '    module.exports = __DshNocturneModule;',
+  "    Object.defineProperty(module.exports, Symbol.toStringTag, {value: 'Module'});",
+  '    return module.exports;',
+  '  }',
+  '});',
+  ''
+].join('\n');
 
-const lines = [];
-lines.push('/**');
-lines.push(' * dsh-nocturne — 浏览器半。');
-lines.push(' *');
-lines.push(' * 纸、灯、辉光三层的渲染代码由 tools/build.mjs 从 sample/nocturne-desk.html 抽取；');
-lines.push(' * 上游配方来自 Chaosnap/Typewriter-Nocturne（MIT），随包保留其版权行。');
-lines.push(' *');
-lines.push(' *   核心 ' + core.split('\n').length + ' 行 · 适配 ' + adapter.split('\n').length + ' 行 · 样式 ' + css.split('\n').length + ' 行');
-lines.push(' *   样张 ' + relative(repo, samplePath).replace(/\\/g, '/') + '（' + statSync(samplePath).size + ' bytes）');
-lines.push(' */');
-lines.push("window.__ModuleLoader__.load({");
-lines.push("  id: 'dsh-nocturne',");
-lines.push('  factory: (require) => {');
-lines.push('    var module = { exports: {} };');
-lines.push('    var exports = module.exports;');
-lines.push("    Object.defineProperty(exports, Symbol.toStringTag, { value: 'Module' });");
-lines.push('');
-lines.push(core);
-lines.push('');
-lines.push(cssLiteral);
-lines.push('');
-lines.push('const DN_VERSION = ' + JSON.stringify(version) + ';');
-lines.push('');
-lines.push(adapter);
-lines.push('');
-lines.push('    return module.exports;');
-lines.push('  }');
-lines.push('});');
-lines.push('');
-
-const file = lines.join('\n');
-writeFileSync(outPath, file);
-console.log('client.js:', file.split('\n').length, 'lines,', file.length, 'bytes');
-console.log('core lines:', core.split('\n').length);
+let sample = readFileSync(paths.template, 'utf8');
+sample = replaceRequired(sample, '/*__CARET_CSS__*/', readFileSync(paths.caret, 'utf8'));
+sample = replaceRequired(sample, '/*__SHARED_CSS__*/', readFileSync(paths.shared, 'utf8'));
+sample = replaceRequired(sample, '/*__NOCTURNE_BUNDLE__*/', sampleBundle.replace(/<\/script/gi, '<\\/script'));
+emit(paths.sampleOut, sample);
+emit(paths.clientOut, client);
+emit(paths.hostOut, hostBundle);

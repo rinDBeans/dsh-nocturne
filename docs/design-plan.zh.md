@@ -1,5 +1,6 @@
-> ⚠️ **这份是 v1 方案，其中 §4.6「用 SVG feTurbulence 近似纸纹」与 §6.2「不复用 GLSL」已被推翻。**
-> 现行实现见 [`docs/nocturne.md`](nocturne.md)。保留此文件仅作决策留痕。
+> ⚠️ **这份是 v1 方案，仅作决策留痕，不是当前需求或验收清单。**
+> 其中 §4.6「用 SVG feTurbulence 近似纸纹」与 §6.2「不复用 GLSL」已被推翻；设置页、拟物件和终端范围也有后续调整。
+> 现行实现见 [`docs/nocturne.md`](nocturne.md)，当前边界见 [`docs/requirements.md`](requirements.md)。
 >
 # dsh-scriptorium · 缮写室
 

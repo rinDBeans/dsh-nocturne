@@ -27,6 +27,7 @@ SOFTWARE.
 Fonts
 -----
 sample/fonts/ contains EB Garamond, Cormorant Garamond and Courier Prime,
-each under the SIL Open Font License 1.1, fetched from Google Fonts. The OFL
-requires that the fonts not be sold on their own and that any derivative be
-released under the OFL; see https://openfontlicense.org.
+each under the SIL Open Font License 1.1, fetched from Google Fonts. The
+copyright notices and complete license texts are distributed alongside the
+font files as eb-garamond-OFL.txt, cormorant-garamond-OFL.txt and
+courier-prime-OFL.txt.

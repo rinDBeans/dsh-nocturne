@@ -13,19 +13,12 @@ html, :root {
   --dn-metal-lo: #5e431c;
   --dn-metal-hi: #f3dca4;
   --dn-metal: #b8904c;
-  /* 缮写室面板用到的字族：宿主不一定有，给出与样张一致的回落链 */
-  --font-ui: "EB Garamond", "Iowan Old Style", Palatino, Georgia, serif;
-  --font-display: "Cormorant Garamond", "EB Garamond", Georgia, serif;
   --font-mono: var(--dsh-font-family-code, ui-monospace, monospace);
 
   /* 配色 token 不写在这里：运行时由 applyTokens() 内联写入并带 !important。
      写在这里会反过来压过内联更新，导致换纸只换画布、不换界面底色。 */
 
-  /* 字体：衬线正文，等宽复古代码。字体文件不随包分发，走系统栈回落。 */
-  --dsh-font-family-text: "EB Garamond", "Iowan Old Style", "Palatino Linotype", Palatino,
-    Georgia, "Source Han Serif SC", "Songti SC", "Noto Serif CJK SC", serif !important;
-  --dsh-font-family-code: "Courier Prime", "IBM Plex Mono", "Courier New",
-    "DejaVu Sans Mono", ui-monospace, monospace !important;
+  /* 字体由 applyTokens() 仅在 full 模式写入；material 保留宿主或 claude-style 字体。 */
 }
 
 /* 整扇窗就是这张纸。没被画到的地方也必须落到纸色上——否则留给 `html` 的
@@ -62,8 +55,3 @@ html::after {
   pointer-events: none;
   background: radial-gradient(ellipse 92% 88% at 50% 46%, transparent 52%, rgba(0, 0, 0, .42) 100%);
 }
-
-/* 缮写室是"器物"，不是纸上的字：它悬在纸光之上，不被灯压暗——
-   与上游一致，Studio 属于窗框而不属于纸面。 */
-.dn-studio { z-index: 2147483000; }
-.dn-handle { z-index: 2147482999; opacity: .55; }

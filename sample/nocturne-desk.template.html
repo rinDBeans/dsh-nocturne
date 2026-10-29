@@ -1,0 +1,382 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Nocturne · 缮写室</title>
+<link rel="stylesheet" href="fonts/fonts.css">
+<style>
+/* ═══════════════════════════════════════════════════════════════════════════
+   Nocturne · 一张立起来的纸，一盏灯。
+   Chaosnap/Typewriter-Nocturne (MIT) 的渲染语义，逐层移植：
+     纸 = albedo × irradiance，multiply 合成在文字之上；
+     灯 = 平方反比 + Lambert + 锥体遮挡，经 1-e^(-E·k) 色调映射；
+     光晕 = 同一套光照模型画进 screen 层。
+   ═══════════════════════════════════════════════════════════════════════ */
+
+:root{
+  --room:#241a14;
+  --room-edge:#070504;
+  --paper:#efdfbd;
+  --ink:#2a2019;
+  --ink-muted:#6b5f52;
+  --ink-faint:#8a7d6b;
+  --gilt:#b08a4a;
+  --gilt-soft:#d9c08a;
+  --gilt-text:#6f5420;
+  --accent:#2f5277;
+  --border:rgba(42,32,25,.16);
+  --border-strong:rgba(42,32,25,.30);
+  --cursor:#3a2c20;
+  --selection:rgba(52,64,112,.20);
+  /* 选区的底色：纸自己的调子。JS 起来后会按纸/房间重算。 */
+  --dn-selection:rgba(176,138,74,.28);
+  --light-rgb:255 210 154;
+  --vignette:.42;
+  --dn-metal-lo:#5e431c;
+  --dn-metal-hi:#f3dca4;
+  --dn-metal:#b8904c;
+
+  --font-ui:"EB Garamond","Iowan Old Style","Palatino Linotype",Palatino,Georgia,"Source Han Serif SC","Songti SC","Noto Serif CJK SC",serif;
+  --font-display:"Cormorant Garamond","EB Garamond",Georgia,serif;
+  --font-mono:"Courier Prime","Courier New","Nimbus Mono PS","DejaVu Sans Mono",ui-monospace,monospace;
+}
+
+html,body{height:100%}
+*{box-sizing:border-box}
+body{
+  margin:0; overflow:hidden;
+  background:var(--room-edge);
+  color:var(--ink);
+  font-family:var(--font-ui);
+  -webkit-font-smoothing:antialiased;
+  text-rendering:optimizeLegibility;
+}
+
+/* ── 房间：看不见的灯在墙上 ─────────────────────────────────────────── */
+#room{
+  position:fixed; inset:0;
+  background:
+    radial-gradient(ellipse 60% 55% at var(--light-x,50%) 30%, rgb(var(--light-rgb) / .16), transparent 72%),
+    radial-gradient(ellipse 120% 95% at 50% 35%, var(--room), var(--room-edge));
+}
+
+/* ── 纸：一张立起来的纸，上缘伸出画外 ──────────────────────────────── */
+#stage{
+  position:fixed; inset:0;
+  display:grid; place-items:start center;
+  overflow:hidden;
+}
+#sheet{
+  position:relative;
+  width:min(1240px, calc(100% - 2 * clamp(64px, 8.5vw, 150px)));
+  height:calc(100% + 12px);
+  margin-top:-12px;
+  background:var(--paper);
+  background:var(--paper);
+  box-shadow:
+    0 0 0 1px rgba(0,0,0,.18),
+    0 34px 70px -24px rgba(0,0,0,.75);
+  overflow:hidden;
+  isolation:isolate;
+}
+
+#content{
+  position:absolute; inset:0;
+  display:flex; flex-direction:column;
+  padding:clamp(30px,3.8vw,54px) clamp(30px,5.2vw,86px) clamp(96px,9vw,124px);
+  overflow:hidden;
+}
+/* 正文在纸上向上滚，纸本身不动——和终端里一样 */
+.scroll{
+  flex:1; min-height:0;
+  overflow-y:auto; overflow-x:hidden;
+  padding-bottom:112px;
+  scrollbar-width:none;
+  -webkit-mask-image:linear-gradient(to bottom, #000 0, #000 calc(100% - 60px), transparent 100%);
+  mask-image:linear-gradient(to bottom, #000 0, #000 calc(100% - 60px), transparent 100%);
+}
+.scroll::-webkit-scrollbar{width:0;height:0}
+#paper,#glow{
+  position:absolute; inset:0;
+  width:100%; height:100%;
+  pointer-events:none;
+  display:block;
+}
+#paper{mix-blend-mode:multiply; z-index:2}
+#glow{mix-blend-mode:screen; z-index:3}
+
+/* 渐晕：TN 的 #vignette */
+#vignette{
+  position:absolute; inset:0; z-index:4; pointer-events:none;
+  background:radial-gradient(ellipse 85% 80% at 50% 45%, transparent 55%, rgba(0,0,0,var(--vignette,.42)) 100%);
+}
+
+/* ── 版式：一张手稿，不是一块卡片 ──────────────────────────────────── */
+.sheet-head{
+  display:flex; align-items:baseline; gap:14px;
+  padding-bottom:14px;
+  margin-bottom:clamp(20px,3vw,34px);
+  border-bottom:1px solid var(--border);
+}
+.brand{
+  font-variant:small-caps; letter-spacing:.22em;
+  font-size:15px; line-height:1; color:var(--gilt-text);
+  white-space:nowrap;
+}
+.where{
+  font-style:italic; font-size:15px; color:var(--ink-muted);
+  overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+}
+.folio{
+  margin-left:auto; font-family:var(--font-mono); font-size:11px;
+  letter-spacing:.16em; color:var(--ink-faint);
+  font-variant-numeric:tabular-nums; white-space:nowrap;
+}
+
+.transcript{ max-width:74ch; }
+
+.turn-user{ margin:0 0 30px; }
+.turn-user .who{
+  display:flex; align-items:center; gap:9px;
+  font-variant:small-caps; letter-spacing:.2em; font-size:11.5px;
+  color:var(--gilt-text); margin-bottom:8px;
+}
+.turn-user .who::after{
+  content:""; flex:1; height:1px;
+  background:linear-gradient(90deg, rgba(176,138,74,.45), transparent);
+}
+.turn-user p{
+  margin:0; font-size:18px; line-height:1.74;
+  font-style:italic; font-weight:500; color:var(--prose-ink,#2e2317);
+}
+
+.prose{ font-size:18px; line-height:1.76; letter-spacing:.004em; font-weight:500; color:var(--prose-ink,#241b14); }
+.prose p{margin:0 0 1.05em}
+.prose strong{font-weight:600; color:var(--prose-strong,#1d1610)}
+.prose a{color:var(--accent); text-decoration:none; border-bottom:1px solid currentColor}
+.prose a:hover{border-bottom-color:var(--accent)}
+.prose h3{
+  font-family:var(--font-display); font-style:italic; font-weight:500;
+  font-size:23px; line-height:1.3; margin:1.5em 0 .55em; color:var(--prose-strong,#241d16);
+}
+.prose ul{margin:0 0 1.05em; padding-left:1.15em}
+.prose li{margin:.24em 0}
+.prose li::marker{color:var(--gilt)}
+
+code,kbd{
+  font-family:var(--font-mono); font-size:.85em;
+  background:rgba(42,32,25,.05);
+  border:1px solid rgba(42,32,25,.08);
+  border-radius:2px; padding:.06em .32em;
+  color:var(--prose-ink,#2e231a);
+}
+
+figure.code{
+  margin:0 0 1.3em;
+  border:1px solid var(--border);
+  border-left:2px solid rgba(176,138,74,.55);
+  background:rgba(42,32,25,.045);
+  border-radius:2px;
+  overflow:hidden;
+}
+figure.code figcaption{
+  display:flex; justify-content:space-between; align-items:center;
+  padding:7px 12px 6px;
+  border-bottom:1px solid var(--border);
+  font-family:var(--font-mono); font-size:10.5px;
+  letter-spacing:.15em; text-transform:uppercase;
+  color:var(--ink-faint);
+}
+figure.code pre{
+  margin:0; padding:13px 15px 14px;
+  overflow-x:auto;
+  font-family:var(--font-mono); font-size:13px; line-height:1.64;
+  color:var(--prose-ink,#2b2118);
+  tab-size:2;
+}
+.k{color:#7b3f6e}
+.s{color:#4c6b2f}
+.c{color:#8a7d6b; font-style:italic}
+.n{color:#8a6a1c}
+
+table{ width:100%; border-collapse:collapse; margin:0 0 1.3em; font-size:15.5px; color:var(--prose-ink,#2a2019); }
+th,td{ text-align:left; padding:7px 10px 7px 0; border-bottom:1px solid var(--border); vertical-align:top; }
+th{
+  font-variant:small-caps; letter-spacing:.14em; font-size:11.5px;
+  color:var(--gilt-text); font-weight:400;
+  border-bottom:1px solid var(--border-strong);
+}
+td:first-child{ font-family:var(--font-mono); font-size:12.8px; color:var(--prose-ink,#33281d); white-space:nowrap }
+tr:last-child td{border-bottom:0}
+
+.status{
+  display:flex; align-items:center; gap:8px;
+  margin:0 0 1.3em;
+  font-size:15px; font-style:italic; color:var(--ink-muted);
+}
+.status .dot{
+  width:5px;height:5px;border-radius:50%;
+  background:var(--gilt); opacity:.8; flex:none;
+}
+
+#composer{
+  position:absolute; left:clamp(30px,5.2vw,86px); right:clamp(30px,5.2vw,86px);
+  bottom:clamp(26px,3.4vw,44px);
+  z-index:1;
+}
+#composer .rule{
+  height:1px; margin-bottom:12px;
+  background:linear-gradient(90deg, transparent, rgba(42,32,25,.22) 12%, rgba(42,32,25,.22) 88%, transparent);
+}
+#composer .line{
+  display:flex; align-items:center; gap:10px;
+  font-size:16.5px; line-height:1.6; color:var(--ink);
+}
+#composer .caret-mark{
+  font-family:var(--font-mono); font-size:14px; color:var(--gilt);
+  user-select:none;
+}
+#input{
+  flex:1; min-width:0;
+  border:0; outline:0; background:transparent; resize:none;
+  font:inherit; color:inherit; line-height:1.6;
+  padding:0; height:1.6em;
+  caret-color:transparent;
+}
+#input::placeholder{ color:var(--ink-faint); font-style:italic }
+
+/* 墨迹光标：一块洇进纸里的墨。形状、圆角、双层阴影照搬上游 .tn-ink-blot。 */
+/*__CARET_CSS__*/
+
+/*__SHARED_CSS__*/
+
+#dock{
+  position:fixed; z-index:20; right:18px; bottom:16px;
+  display:grid; gap:4px;
+  padding:7px 10px 7px 12px;
+  border:1px solid rgba(176,138,74,.3);
+  border-radius:9px;
+  background:rgba(22,16,12,.9);
+  backdrop-filter:blur(12px);
+  box-shadow:0 18px 44px -18px rgba(0,0,0,.9);
+  font-family:var(--font-mono); font-size:10.5px;
+  letter-spacing:.16em; text-transform:uppercase;
+  color:rgba(241,230,207,.62);
+  opacity:.34; transition:opacity 220ms ease;
+}
+#dock:hover,#dock:focus-within{opacity:1}
+#dock .row{ display:flex; align-items:center; gap:3px }
+#dock .gilt{ color:var(--gilt-soft); letter-spacing:.2em; width:30px; flex:none }
+#dock button{
+  font:inherit; letter-spacing:inherit; text-transform:inherit;
+  color:inherit; background:transparent; cursor:pointer;
+  border:1px solid transparent; border-radius:5px;
+  padding:3px 6px;
+}
+#dock button:hover{ color:#f1e6cf; border-color:rgba(176,138,74,.35) }
+#dock button[aria-pressed="true"]{
+  color:#f3dca4; border-color:rgba(176,138,74,.55); background:rgba(255,215,154,.1);
+}
+#dock button:focus-visible{ outline:1px dotted var(--gilt); outline-offset:2px }
+
+#lamp-toggle{
+  position:fixed; z-index:20; left:18px; top:16px;
+  width:32px; height:30px; display:grid; place-items:center;
+  border:1px solid transparent; border-radius:6px;
+  background:transparent; color:var(--gilt); cursor:pointer; opacity:.72;
+}
+#lamp-toggle:hover,#lamp-toggle:focus-visible{opacity:1;border-color:rgba(176,138,74,.35);outline:none}
+#lamp-toggle svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.4;stroke-linecap:round;stroke-linejoin:round}
+
+@media (max-width:760px){
+  #sheet{width:calc(100% - 40px); box-shadow:0 0 0 1px rgba(0,0,0,.18)}
+  .transcript{max-width:none}
+}
+@media (prefers-reduced-motion:reduce){
+  .dn-caret{animation:none}
+  #dock{transition:none}
+}
+</style>
+</head>
+<body>
+
+<div id="room"></div>
+
+<div id="stage">
+  <div id="sheet">
+    <div id="content">
+      <div class="sheet-head">
+        <span class="brand">Nocturne</span>
+        <span class="where" id="sheet-where">Paper &amp; Ink · Parchment</span>
+        <span class="folio">iv</span>
+      </div>
+
+      <div class="scroll"><div class="transcript">
+        <div class="turn-user">
+          <div class="who">你</div>
+          <p>把那个组件的圆角改成 0.5px 发丝线，顺手补一条测试。别把 elevation 阴影一起改了。</p>
+        </div>
+
+        <div class="prose">
+          <p>已经把 <code>border: 0.5px</code> 收到 <code>elevation</code> 的内层描边里，阴影保持原样。Chromium 会把它画成一个设备像素，所以视觉上比 <code>1px</code> 更克制，也不会在多显示器缩放时忽粗忽细。</p>
+
+          <h3>改动落在三处</h3>
+          <ul>
+            <li><code>src/styles/card.css</code>：描边搬进内阴影，颜色取自同一个 token</li>
+            <li><code>src/tokens/elevation.ts</code>：新增 <code>stroke-color</code>，不再写死颜色</li>
+            <li><code>test/card.test.ts</code>：断言 0.5px 在 1x / 2x 下都输出为最细线</li>
+          </ul>
+
+          <figure class="code">
+            <figcaption><span>src/styles/card.css</span><span>CSS</span></figcaption>
+<pre><span class="c">/* 发丝线来自同一个 token，别写死颜色 */</span>
+<span class="k">.card</span> {
+  border: <span class="n">0</span>;
+  box-shadow:
+    inset <span class="n">0</span> <span class="n">0</span> <span class="n">0</span> <span class="n">0.5px</span> <span class="k">var</span>(--elevation-stroke-color),
+    <span class="k">var</span>(--elevation-panel);
+}</pre>
+          </figure>
+
+          <p>三点需要你确认，尤其是第二点——它会改变纸面观感。</p>
+
+          <table>
+            <thead><tr><th>项</th><th>改动</th><th>影响</th></tr></thead>
+            <tbody>
+              <tr><td>描边</td><td>1px → 0.5px</td><td>更轻，接近印刷</td></tr>
+              <tr><td>主按钮</td><td>白字 → 墨字</td><td>金底对比度 3.14 → 4.99</td></tr>
+              <tr><td>阴影</td><td>不变</td><td>无回归风险</td></tr>
+            </tbody>
+          </table>
+
+          <p class="status"><span class="dot"></span>Ran 24 tests in 1.42s — all passing</p>
+
+          <p>The quick brown fox jumps over the lazy dog，落字成稿。</p>
+        </div>
+      </div></div>
+    </div>
+
+    <div id="composer">
+      <div class="rule"></div>
+      <div class="line" id="composer-line">
+        <span class="caret-mark">❯</span>
+        <input id="input" type="text" autocomplete="off" spellcheck="false" placeholder="继续写点什么…">
+      </div>
+    </div>
+
+    <canvas id="paper"></canvas>
+    <canvas id="glow"></canvas>
+    <div id="vignette"></div>
+  </div>
+</div>
+
+<button id="lamp-toggle" type="button" aria-pressed="true" aria-label="台灯开关" title="台灯开关">
+  <svg viewBox="0 0 20 20"><path d="M6 9h8l-2-6H8z"/><path d="M10 9v6M6.5 17h7"/><path d="M8 12l-2 2.5M12 12l2 2.5" opacity=".6"/></svg>
+</button>
+
+
+
+<script>/*__NOCTURNE_BUNDLE__*/</script>
+</body>
+</html>

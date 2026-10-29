@@ -247,7 +247,6 @@ tr:last-child td{border-bottom:0}
 #input::placeholder{ color:var(--ink-faint); font-style:italic }
 
 /* 墨迹光标：一块洇进纸里的墨。形状、圆角、双层阴影照搬上游 .tn-ink-blot。 */
-/*>>> caret-css */
 .dn-caret{
   position:fixed; left:0; top:0; z-index:1;
   display:none; pointer-events:none; will-change:transform;
@@ -342,7 +341,8 @@ tr:last-child td{border-bottom:0}
   100%{opacity:0}
 }
 
-/* ── 缮写室 Studio：一张悬在桌上的深色玻璃面板 ─────────────────────────── */
+/*>>> studio-css */
+/* ── 缮写室 Studio：仅离线样张使用，插件构建时剔除 ────────────────────── */
 .dn-studio{
   position:fixed; z-index:40; top:52px; right:18px;
   width:296px; max-height:calc(100% - 88px); overflow-y:auto;
@@ -473,13 +473,15 @@ tr:last-child td{border-bottom:0}
 @media (max-width:720px){
   .dn-studio{left:14px; right:14px; width:auto; top:auto; bottom:62px; max-height:52%}
 }
+/*<<< studio-css */
 @media (prefers-reduced-motion:reduce){
   .dn-quill,.dn-quill-sway,.dn-quill-shine,.dn-quill-glint{animation:none}
+  /*>>> studio-css */
   .dn-handle,.dn-studio .toggle::after{transition:none}
+  /*<<< studio-css */
 }
-/*<<< caret-css */
 
-/*>>> shared-css */
+
 /* ── 选区：纸自己的颜色 ────────────────────────────────────────────────
    不是系统那种蓝，也压不住系统的行为——只换背景色，拖动、复制、双击选词全归浏览器。
    不加 !important：宿主若另有口径，让它赢。 */
@@ -518,7 +520,7 @@ tr:last-child td{border-bottom:0}
 /* 容器的原生滚条让位给纸夹；滚轮、键盘、拖动都还在。 */
 [data-dn-scroll="custom"]{ scrollbar-width:none; -ms-overflow-style:none }
 [data-dn-scroll="custom"]::-webkit-scrollbar{ width:0; height:0 }
-/*<<< shared-css */
+
 
 #dock{
   position:fixed; z-index:20; right:18px; bottom:16px;
@@ -646,290 +648,312 @@ tr:last-child td{border-bottom:0}
 
 
 
-<script>
-/* ═══════════════════════════════════════════════════════════════════════════
-   1 · 数据：照搬 app/nocturne/papers.ts 与 themes.ts
-   ═══════════════════════════════════════════════════════════════════════ */
-const LIGHT_ANSI = {
-  black:'#2b231c', red:'#9c3a2a', green:'#4c6b2f', yellow:'#8a6a1c',
-  blue:'#2f5277', magenta:'#7b3f6e', cyan:'#2e6b6a', white:'#7d7060',
-  lightBlack:'#6e6153', lightRed:'#b0452a', lightGreen:'#557a33', lightYellow:'#94701a',
-  lightBlue:'#3a6491', lightMagenta:'#8c4a7e', lightCyan:'#317876', lightWhite:'#5b4f43'
-};
-const NIGHT_ANSI = {
-  black:'#2a2b42', red:'#d88a9a', green:'#9cc3a4', yellow:'#e2cf9a',
-  blue:'#8ea8e0', magenta:'#b79ce0', cyan:'#8cc8d6', white:'#c9cadf',
-  lightBlack:'#6f7192', lightRed:'#eba5b3', lightGreen:'#b4d8bc', lightYellow:'#efdfb2',
-  lightBlue:'#aac0ef', lightMagenta:'#cbb5ef', lightCyan:'#a8dbe6', lightWhite:'#f0f0fa'
-};
-const lightPaper = (id, name, paperColor, surface) => ({
-  id, name, appearance:'light', paper:paperColor,
-  ink:'#2a2019', inkMuted:'#6b5f52', cursor:'#3a2c20',
-  selection:'rgba(52, 64, 112, 0.2)', ansi:LIGHT_ANSI, surface
-});
-
-const PAPERS = {
-  cotton: lightPaper('cotton', 'Cotton', '#eee6d5', {crinkle:.3, felt:1, laid:0, linen:0, mottle:.08, age:0}),
-  laid: lightPaper('laid', 'Laid', '#f1e9d6', {crinkle:.22, felt:0, laid:1, linen:0, mottle:.18, age:0}),
-  linen: lightPaper('linen', 'Linen', '#ebe5d8', {crinkle:.2, felt:0, laid:0, linen:1, mottle:.08, age:0}),
-  onionskin: lightPaper('onionskin', 'Onionskin', '#f2f1ea', {crinkle:.08, felt:0, laid:0, linen:0, mottle:.04, age:0}),
-  parchment: lightPaper('parchment', 'Parchment', '#efdfbd', {crinkle:.25, felt:0, laid:0, linen:0, mottle:1, age:.75}),
-  night: {
-    id:'night', name:'Night', appearance:'dark', paper:'#1d1a20',
-    ink:'#e6e1ea', inkMuted:'#9a94a6', cursor:'#e9e7ff',
-    selection:'rgba(196, 188, 255, 0.2)', ansi:NIGHT_ANSI,
-    surface:{crinkle:.3, felt:0, laid:0, linen:0, mottle:.1, age:0}
-  }
-};
-
-const THEMES = {
-  'paper-and-ink': {
-    selection:'rgba(176,138,74,.30)',
-    palette:{room:'#241a14', roomEdge:'#070504', paper:'#f4ecdb', paperEdge:'#e1d1b0',
-      ink:'#2b231c', inkMuted:'#6e6153', inkFaint:'#a89a85',
-      accent:'#b08a4a', accentSoft:'#d9c08a', border:'#c9b48e'},
-    light:{source:'carriage', color:'#ffd29a', position:{x:.5, y:1}, shade:.42},
-    atmosphere:{particles:.1, filmGrain:.08, vignette:.35}
-  },
-  'midnight-study': {
-    selection:'rgba(201,164,92,.30)',
-    palette:{room:'#140f0b', roomEdge:'#030202', paper:'#1c1714', paperEdge:'#2c241e',
-      ink:'#eadfc8', inkMuted:'#a39580', inkFaint:'#6b5f52',
-      accent:'#c9a45c', accentSoft:'#8a6f3d', border:'#3a2f27'},
-    light:{source:'desk-lamp', color:'#ffb35c', position:{x:.84, y:.04}, shade:.5},
-    atmosphere:{particles:.2, filmGrain:.12, vignette:.6}
-  },
-  'moonlit-poetry': {
-    selection:'rgba(160,168,214,.28)',
-    palette:{room:'#0e0e1a', roomEdge:'#030307', paper:'#171826', paperEdge:'#26283e',
-      ink:'#dcdcec', inkMuted:'#9496b4', inkFaint:'#5c5e7c',
-      accent:'#b7bdd6', accentSoft:'#6e7396', border:'#2c2e48'},
-    light:{source:'moonlight', color:'#c9d4ff', position:{x:.14, y:-.1}, shade:.48},
-    atmosphere:{particles:.35, filmGrain:.1, vignette:.55}
-  }
-};
-
-/* 出厂设置 = TN 的 balanced 灯预设 + manuscript 字体预设 */
-const SETTINGS = {
-  theme:'paper-and-ink',
-  paper:'parchment',
-  lamp:true,
-  enabled:true,
-  intensity:1.1,
-  spread:74,
-  beam:'pointed',
-  aim:0,
-  reach:1,
-  softness:.65,
-  bloom:.25,
-  grain:.1,
-  cursorGlow:.35,
-  paperIllumination:.72,
-  particles:.45,
-  texture:1,
-  cursorMode:'ink',
-  // auto：探测到别的皮肤在改同一批 token 时，只叠纸与灯，不去抢它的配色
-  coexist:'auto',
-  // 滚条：上游三形态（纸夹 / 细杆 / 原生），纸夹另有四种金属
-  scrollbar:{style:'clip', finish:'silver', barWidth:6, barOpacity:.45},
-  // 窗光自成一组：上游的 Studio 里窗格数、斜度、柔边都是独立参数，
-  // 不能借台灯的 softness（借了就是一团糊，达不到截图里那种 3×2 的方窗）。
-  window:{x:.5, y:.5, columns:3, rows:2, softness:.15, slant:0}
-};
-const theme = () => THEMES[SETTINGS.theme];
-const paper = () => PAPERS[SETTINGS.paper];
-
-/**
- * 选区的底色：纸自己的调子，不是浏览器的蓝。
- * 浅色纸用房间的描金（与细边、页码同源），深色纸用纸自带的月白。
- * 上游的规则是"主题选色优先、纸选色兜底"；这里的纸与房间是正交的，所以按纸的明暗分流。
- */
-function washColor() {
-  const p = paper();
-  const t = theme();
-  return p.appearance === 'dark' ? p.selection : (t.selection || p.selection);
-}
-
-/**
- * 纸面上的"另一层纸"：把纸色朝墨色调一点。
- * 气泡、输入框、菜单、侧栏都用它——整扇窗是一张纸，这些是纸上压出来的一层，
- * 不是浮在纸上的一张白卡片。深色纸上 ink 是浅的，所以这条在夜纸上会自动变成"略亮"。
- */
-function surfaceColor(amount) {
-  const base = toUnit(paper().paper);
-  const ink = toUnit(paper().ink);
-  const mixed = [0, 1, 2].map((i) => Math.round((base[i] * (1 - amount) + ink[i] * amount) * 255));
-  return '#' + mixed.map((v) => Math.max(0, Math.min(255, v)).toString(16).padStart(2, '0')).join('');
-}
-
-/**
- * 标定值：这一组是亮度分布对到上游官方截图（p50≈115 / p95≈178）的那一套。
- * 把滑杆推散之后还能一键回家——"复刻"得有个可回的基准。
- */
-const NOCTURNE_DEFAULTS = JSON.parse(JSON.stringify(SETTINGS));
-
-/* ═══════════════════════════════════════════════════════════════════════════
-   2 · 小工具
-   ═══════════════════════════════════════════════════════════════════════ */
-const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
-const smoothstep = (e0, e1, x) => {
-  if (e0 === e1) return x < e0 ? 0 : 1;
-  const t = clamp((x - e0) / (e1 - e0), 0, 1);
-  return t * t * (3 - 2 * t);
-};
-const toUnit = (hexColor) => [1, 3, 5].map(i => parseInt(hexColor.slice(i, i + 2), 16) / 255);
-const norm = (v) => { const l = Math.hypot(v[0], v[1], v[2]) || 1; return [v[0]/l, v[1]/l, v[2]/l]; };
-const dot3 = (a, b) => a[0]*b[0] + a[1]*b[1] + a[2]*b[2];
-const spreadToCosine = (deg) => Math.cos((clamp(deg, 5, 170) * Math.PI) / 360);
-const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-
-/* ═══════════════════════════════════════════════════════════════════════════
-   3 · 光：app/nocturne/light-model.ts 的逐行移植
-   ═══════════════════════════════════════════════════════════════════════ */
-const barHalfWidth = (w, h) => Math.min(16, Math.max(4, .04 * Math.min(w, h)));
-
-function between(offset, cell, bar, soft) {
-  const t = offset / cell;
-  return smoothstep(bar - soft, bar + soft, Math.abs(t - Math.round(t)) * cell);
-}
-
-function windowGobo(rig, x, y) {
-  const w = rig.window;
-  const soft = Math.max(.5, w.softness);
-  const sx = x - (y - w.y) * w.skew;
-  const dx = sx - w.x;
-  const dy = y - w.y;
-  const across = smoothstep(-soft, soft, w.width / 2 - Math.abs(dx));
-  const down = smoothstep(-soft, soft, w.height / 2 - Math.abs(dy));
-  const paneW = w.width / w.columns;
-  const paneH = w.height / w.rows;
-  const bar = barHalfWidth(paneW, paneH);
-  const open = between(dx + w.width / 2, paneW, bar, soft) * between(dy + w.height / 2, paneH, bar, soft);
-  return across * down * (.3 + .7 * open);
-}
-
-function irradiance(rig, x, y, normal) {
-  const n = normal || [0, 0, 1];
-  if (rig.source === 'moonlight') {
-    return Math.max(0, dot3(n, [-rig.direction[0], -rig.direction[1], -rig.direction[2]])) * windowGobo(rig, x, y);
-  }
-  const d = [x - rig.position[0], y - rig.position[1], -rig.position[2]];
-  const d2 = Math.max(1, dot3(d, d));
-  const ray = norm(d);
-  const cone = smoothstep(rig.cosOuter, rig.cosInner, dot3(ray, rig.direction));
-  const lambert = Math.max(0, -dot3(n, ray));
-  return (cone * lambert) / d2;
-}
-
-const toneMap = (v) => 1 - Math.exp(-Math.max(0, v));
-const lightAmount = (rig, x, y, n) => toneMap(irradiance(rig, x, y, n) * rig.exposure);
-
-function referenceExposure(rig, x, y) {
-  const E = irradiance(rig, x, y);
-  return E > 0 ? SETTINGS.intensity / E : 0;
-}
-
-/**
- * 与 TN buildRig 同一套几何。唯一改编：灯挂在「输入光标」上，而不是打字机小车上——
- * 于是底部仍有那道标志性的光锥，且它随你打字的位置游走。
- */
-function buildRig(sheet, caretSheetX) {
-  const width = sheet.width;
-  const height = sheet.height;
-  const halfAngle = Math.acos(spreadToCosine(SETTINGS.spread));
-  const cosOuter = Math.cos(halfAngle);
-  const cosInner = Math.cos(halfAngle * (1 - .85 * SETTINGS.softness));
-  const source = theme().light.source;
-
-  const base = {
-    source,
-    position:[0, 0, 1], direction:[0, 0, -1],
-    cosOuter, cosInner, exposure:1,
-    window:{x:width/2, y:height/2, width, height, columns:3, rows:2, softness:8, skew:0}
+<script>var __NocturneSample = (() => {
+  // packages/dsh-nocturne/src/core/math.js
+  var clamp = (v, a, b) => Math.min(b, Math.max(a, v));
+  var smoothstep = (e0, e1, x) => {
+    if (e0 === e1) return x < e0 ? 0 : 1;
+    const t = clamp((x - e0) / (e1 - e0), 0, 1);
+    return t * t * (3 - 2 * t);
   };
-  const swivel = (clamp(SETTINGS.aim, -45, 45) * Math.PI) / 180;
+  var toUnit = (hexColor) => [1, 3, 5].map((i) => parseInt(hexColor.slice(i, i + 2), 16) / 255);
+  var norm = (v) => {
+    const l = Math.hypot(v[0], v[1], v[2]) || 1;
+    return [v[0] / l, v[1] / l, v[2] / l];
+  };
+  var dot3 = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+  var spreadToCosine = (deg) => Math.cos(clamp(deg, 5, 170) * Math.PI / 360);
+  var motionQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
+  var reduceMotion = motionQuery.matches;
+  var onMotionChange = (event) => {
+    reduceMotion = event.matches;
+  };
+  if (typeof motionQuery.addEventListener === "function") motionQuery.addEventListener("change", onMotionChange);
+  else if (typeof motionQuery.addListener === "function") motionQuery.addListener(onMotionChange);
 
-  if (source === 'carriage') {
-    // 灯座钉在纸的横向中心，只随光标轻微偏移（±30%）。TN 的灯跟着打字机小车横移，
-    // 那是因为终端的光标常在左侧；正文界面若照搬，光锥会永远挤在左边缘。
-    const centre = width / 2;
-    const lampX = clamp(centre + (caretSheetX - centre) * .3, 40, width - 40);
-    const lampY = height - Math.max(18, height * .03);
-    const lamp = [lampX, lampY, 12 + .02 * height];
-    const throwLength = .6 * SETTINGS.reach * height;
-    const aim = [lampX + Math.tan(swivel) * throwLength, lampY - throwLength, 0];
-    const rig = Object.assign({}, base, {
-      position:lamp,
-      direction:norm([aim[0] - lamp[0], aim[1] - lamp[1], aim[2] - lamp[2]])
-    });
-    const refLength = .5 * SETTINGS.reach * height;
-    const ref = [lampX + Math.tan(swivel) * refLength, lampY - refLength];
-    rig.exposure = referenceExposure(rig, ref[0], ref[1]);
-    return rig;
-  }
-
-  if (source === 'desk-lamp') {
-    const pos = theme().light.position;
-    const lamp = [pos.x * width, pos.y * height, (.3 + .4 * SETTINGS.reach) * height];
-    const dx = width * .5 - lamp[0];
-    const dy = height * .55 - lamp[1];
-    const cos = Math.cos(swivel), sin = Math.sin(swivel);
-    const aim = [lamp[0] + dx * cos - dy * sin, lamp[1] + dx * sin + dy * cos, 0];
-    const rig = Object.assign({}, base, {
-      position:lamp,
-      direction:norm([aim[0] - lamp[0], aim[1] - lamp[1], aim[2] - lamp[2]])
-    });
-    rig.exposure = referenceExposure(rig, aim[0], aim[1]);
-    return rig;
-  }
-
-  const pos = theme().light.position;
-  const azimuth = Math.atan2(.5 - pos.y, .5 - pos.x) + swivel;
-  const elevation = (40 * Math.PI) / 180;
-  const direction = norm([
-    Math.cos(azimuth) * Math.cos(elevation),
-    Math.sin(azimuth) * Math.cos(elevation),
-    -Math.sin(elevation)
-  ]);
-  const frame = SETTINGS.window;
-  const pane = Math.max(60, (Math.min(width * .62, height * .7) * SETTINGS.reach) / 2);
-  const rig = Object.assign({}, base, {
-    direction,
-    window:{
-      x:width * frame.x,
-      y:height * frame.y,
-      width:pane * frame.columns,
-      height:pane * frame.rows,
-      columns:frame.columns,
-      rows:frame.rows,
-      softness:4 + 40 * frame.softness,
-      skew:Math.tan((clamp(frame.slant, -35, 35) * Math.PI) / 180)
-    }
+  // packages/dsh-nocturne/src/core/state.js
+  var LIGHT_ANSI = {
+    black: "#2b231c",
+    red: "#9c3a2a",
+    green: "#4c6b2f",
+    yellow: "#8a6a1c",
+    blue: "#2f5277",
+    magenta: "#7b3f6e",
+    cyan: "#2e6b6a",
+    white: "#7d7060",
+    lightBlack: "#6e6153",
+    lightRed: "#b0452a",
+    lightGreen: "#557a33",
+    lightYellow: "#94701a",
+    lightBlue: "#3a6491",
+    lightMagenta: "#8c4a7e",
+    lightCyan: "#317876",
+    lightWhite: "#5b4f43"
+  };
+  var NIGHT_ANSI = {
+    black: "#2a2b42",
+    red: "#d88a9a",
+    green: "#9cc3a4",
+    yellow: "#e2cf9a",
+    blue: "#8ea8e0",
+    magenta: "#b79ce0",
+    cyan: "#8cc8d6",
+    white: "#c9cadf",
+    lightBlack: "#6f7192",
+    lightRed: "#eba5b3",
+    lightGreen: "#b4d8bc",
+    lightYellow: "#efdfb2",
+    lightBlue: "#aac0ef",
+    lightMagenta: "#cbb5ef",
+    lightCyan: "#a8dbe6",
+    lightWhite: "#f0f0fa"
+  };
+  var lightPaper = (id, name, paperColor, surface) => ({
+    id,
+    name,
+    appearance: "light",
+    paper: paperColor,
+    ink: "#2a2019",
+    inkMuted: "#6b5f52",
+    cursor: "#3a2c20",
+    selection: "rgba(52, 64, 112, 0.2)",
+    ansi: LIGHT_ANSI,
+    surface
   });
-  const ref = Math.max(0, -direction[2]);
-  rig.exposure = ref > 0 ? SETTINGS.intensity / ref : 0;
-  return rig;
-}
+  var PAPERS = {
+    cotton: lightPaper("cotton", "Cotton", "#eee6d5", { crinkle: 0.3, felt: 1, laid: 0, linen: 0, mottle: 0.08, age: 0 }),
+    laid: lightPaper("laid", "Laid", "#f1e9d6", { crinkle: 0.22, felt: 0, laid: 1, linen: 0, mottle: 0.18, age: 0 }),
+    linen: lightPaper("linen", "Linen", "#ebe5d8", { crinkle: 0.2, felt: 0, laid: 0, linen: 1, mottle: 0.08, age: 0 }),
+    onionskin: lightPaper("onionskin", "Onionskin", "#f2f1ea", { crinkle: 0.08, felt: 0, laid: 0, linen: 0, mottle: 0.04, age: 0 }),
+    parchment: lightPaper("parchment", "Parchment", "#efdfbd", { crinkle: 0.25, felt: 0, laid: 0, linen: 0, mottle: 1, age: 0.75 }),
+    night: {
+      id: "night",
+      name: "Night",
+      appearance: "dark",
+      paper: "#1d1a20",
+      ink: "#e6e1ea",
+      inkMuted: "#9a94a6",
+      cursor: "#e9e7ff",
+      selection: "rgba(196, 188, 255, 0.2)",
+      ansi: NIGHT_ANSI,
+      surface: { crinkle: 0.3, felt: 0, laid: 0, linen: 0, mottle: 0.1, age: 0 }
+    }
+  };
+  var THEMES = {
+    "paper-and-ink": {
+      selection: "rgba(176,138,74,.30)",
+      palette: {
+        room: "#241a14",
+        roomEdge: "#070504",
+        paper: "#f4ecdb",
+        paperEdge: "#e1d1b0",
+        ink: "#2b231c",
+        inkMuted: "#6e6153",
+        inkFaint: "#a89a85",
+        accent: "#b08a4a",
+        accentSoft: "#d9c08a",
+        border: "#c9b48e"
+      },
+      light: { source: "carriage", color: "#ffd29a", position: { x: 0.5, y: 1 }, shade: 0.42 },
+      atmosphere: { particles: 0.1, filmGrain: 0.08, vignette: 0.35 }
+    },
+    "midnight-study": {
+      selection: "rgba(201,164,92,.30)",
+      palette: {
+        room: "#140f0b",
+        roomEdge: "#030202",
+        paper: "#1c1714",
+        paperEdge: "#2c241e",
+        ink: "#eadfc8",
+        inkMuted: "#a39580",
+        inkFaint: "#6b5f52",
+        accent: "#c9a45c",
+        accentSoft: "#8a6f3d",
+        border: "#3a2f27"
+      },
+      light: { source: "desk-lamp", color: "#ffb35c", position: { x: 0.84, y: 0.04 }, shade: 0.5 },
+      atmosphere: { particles: 0.2, filmGrain: 0.12, vignette: 0.6 }
+    },
+    "moonlit-poetry": {
+      selection: "rgba(160,168,214,.28)",
+      palette: {
+        room: "#0e0e1a",
+        roomEdge: "#030307",
+        paper: "#171826",
+        paperEdge: "#26283e",
+        ink: "#dcdcec",
+        inkMuted: "#9496b4",
+        inkFaint: "#5c5e7c",
+        accent: "#b7bdd6",
+        accentSoft: "#6e7396",
+        border: "#2c2e48"
+      },
+      light: { source: "moonlight", color: "#c9d4ff", position: { x: 0.14, y: -0.1 }, shade: 0.48 },
+      atmosphere: { particles: 0.35, filmGrain: 0.1, vignette: 0.55 }
+    }
+  };
+  var SETTINGS = {
+    theme: "paper-and-ink",
+    paper: "parchment",
+    lamp: true,
+    enabled: true,
+    // 诊断默认关闭；显式开启后才扫描 DOM、记录卡顿和采样 GPU。
+    diagnostics: false,
+    // 环境颗粒与尘埃默认静态；需要连续动画时再显式开启。
+    ambientMotion: false,
+    intensity: 1.1,
+    spread: 74,
+    beam: "pointed",
+    aim: 0,
+    reach: 1,
+    softness: 0.65,
+    bloom: 0.25,
+    grain: 0.1,
+    cursorGlow: 0.35,
+    paperIllumination: 0.72,
+    particles: 0.45,
+    texture: 1,
+    cursorMode: "ink",
+    // auto：探测到别的皮肤在改同一批 token 时，只叠纸与灯，不去抢它的配色
+    coexist: "auto",
+    // 滚条：上游三形态（纸夹 / 细杆 / 原生），纸夹另有四种金属
+    scrollbar: { style: "clip", finish: "silver", barWidth: 6, barOpacity: 0.45 },
+    // 窗光自成一组：上游的 Studio 里窗格数、斜度、柔边都是独立参数，
+    // 不能借台灯的 softness（借了就是一团糊，达不到截图里那种 3×2 的方窗）。
+    window: { x: 0.5, y: 0.5, columns: 3, rows: 2, softness: 0.15, slant: 0 }
+  };
+  var theme = () => THEMES[SETTINGS.theme];
+  var paper = () => PAPERS[SETTINGS.paper];
+  function washColor() {
+    const p = paper();
+    const t = theme();
+    return p.appearance === "dark" ? p.selection : t.selection || p.selection;
+  }
+  var NOCTURNE_DEFAULTS = JSON.parse(JSON.stringify(SETTINGS));
 
-/**
- * 环境光下限。TN 的 ambientFloor 保证墨/纸 ≥ 4.5:1，那只够等宽的终端字；这里的正文是
- * 衬线散文，笔画细、字面小，实测同样的下限会让正文发灰。所以下限抬到 0.64——理由写在
- * docs/nocturne.md「为什么不是照抄 0.55」一节，不是随手调的数字。
- */
-function ambientLevel() {
-  const p = paper();
-  const floor = p.appearance === 'light' ? .64 : .68;
-  return Math.min(1, Math.max(floor, 1 - theme().light.shade * (.55 + .45 * SETTINGS.intensity)));
-}
+  // packages/dsh-nocturne/src/core/light-model.js
+  var barHalfWidth = (w, h) => Math.min(16, Math.max(4, 0.04 * Math.min(w, h)));
+  function between(offset, cell, bar, soft) {
+    const t = offset / cell;
+    return smoothstep(bar - soft, bar + soft, Math.abs(t - Math.round(t)) * cell);
+  }
+  function windowGobo(rig, x, y) {
+    const w = rig.window;
+    const soft = Math.max(0.5, w.softness);
+    const sx = x - (y - w.y) * w.skew;
+    const dx = sx - w.x;
+    const dy = y - w.y;
+    const across = smoothstep(-soft, soft, w.width / 2 - Math.abs(dx));
+    const down = smoothstep(-soft, soft, w.height / 2 - Math.abs(dy));
+    const paneW = w.width / w.columns;
+    const paneH = w.height / w.rows;
+    const bar = barHalfWidth(paneW, paneH);
+    const open = between(dx + w.width / 2, paneW, bar, soft) * between(dy + w.height / 2, paneH, bar, soft);
+    return across * down * (0.3 + 0.7 * open);
+  }
+  function irradiance(rig, x, y, normal) {
+    const n = normal || [0, 0, 1];
+    if (rig.source === "moonlight") {
+      return Math.max(0, dot3(n, [-rig.direction[0], -rig.direction[1], -rig.direction[2]])) * windowGobo(rig, x, y);
+    }
+    const d = [x - rig.position[0], y - rig.position[1], -rig.position[2]];
+    const d2 = Math.max(1, dot3(d, d));
+    const ray = norm(d);
+    const cone = smoothstep(rig.cosOuter, rig.cosInner, dot3(ray, rig.direction));
+    const lambert = Math.max(0, -dot3(n, ray));
+    return cone * lambert / d2;
+  }
+  var toneMap = (v) => 1 - Math.exp(-Math.max(0, v));
+  var lightAmount = (rig, x, y, n) => toneMap(irradiance(rig, x, y, n) * rig.exposure);
+  function referenceExposure(rig, x, y) {
+    const E = irradiance(rig, x, y);
+    return E > 0 ? SETTINGS.intensity / E : 0;
+  }
+  function buildRig(sheet, caretSheetX) {
+    const width = sheet.width;
+    const height = sheet.height;
+    const halfAngle = Math.acos(spreadToCosine(SETTINGS.spread));
+    const cosOuter = Math.cos(halfAngle);
+    const cosInner = Math.cos(halfAngle * (1 - 0.85 * SETTINGS.softness));
+    const source = theme().light.source;
+    const base = {
+      source,
+      position: [0, 0, 1],
+      direction: [0, 0, -1],
+      cosOuter,
+      cosInner,
+      exposure: 1,
+      window: { x: width / 2, y: height / 2, width, height, columns: 3, rows: 2, softness: 8, skew: 0 }
+    };
+    const swivel = clamp(SETTINGS.aim, -45, 45) * Math.PI / 180;
+    if (source === "carriage") {
+      const centre = width / 2;
+      const lampX = clamp(centre + (caretSheetX - centre) * 0.3, 40, width - 40);
+      const lampY = height - Math.max(18, height * 0.03);
+      const lamp = [lampX, lampY, 12 + 0.02 * height];
+      const throwLength = 0.6 * SETTINGS.reach * height;
+      const aim = [lampX + Math.tan(swivel) * throwLength, lampY - throwLength, 0];
+      const rig2 = Object.assign({}, base, {
+        position: lamp,
+        direction: norm([aim[0] - lamp[0], aim[1] - lamp[1], aim[2] - lamp[2]])
+      });
+      const refLength = 0.5 * SETTINGS.reach * height;
+      const ref2 = [lampX + Math.tan(swivel) * refLength, lampY - refLength];
+      rig2.exposure = referenceExposure(rig2, ref2[0], ref2[1]);
+      return rig2;
+    }
+    if (source === "desk-lamp") {
+      const pos2 = theme().light.position;
+      const lamp = [pos2.x * width, pos2.y * height, (0.3 + 0.4 * SETTINGS.reach) * height];
+      const dx = width * 0.5 - lamp[0];
+      const dy = height * 0.55 - lamp[1];
+      const cos = Math.cos(swivel), sin = Math.sin(swivel);
+      const aim = [lamp[0] + dx * cos - dy * sin, lamp[1] + dx * sin + dy * cos, 0];
+      const rig2 = Object.assign({}, base, {
+        position: lamp,
+        direction: norm([aim[0] - lamp[0], aim[1] - lamp[1], aim[2] - lamp[2]])
+      });
+      rig2.exposure = referenceExposure(rig2, aim[0], aim[1]);
+      return rig2;
+    }
+    const pos = theme().light.position;
+    const azimuth = Math.atan2(0.5 - pos.y, 0.5 - pos.x) + swivel;
+    const elevation = 40 * Math.PI / 180;
+    const direction = norm([
+      Math.cos(azimuth) * Math.cos(elevation),
+      Math.sin(azimuth) * Math.cos(elevation),
+      -Math.sin(elevation)
+    ]);
+    const frame2 = SETTINGS.window;
+    const pane = Math.max(60, Math.min(width * 0.62, height * 0.7) * SETTINGS.reach / 2);
+    const rig = Object.assign({}, base, {
+      direction,
+      window: {
+        x: width * frame2.x,
+        y: height * frame2.y,
+        width: pane * frame2.columns,
+        height: pane * frame2.rows,
+        columns: frame2.columns,
+        rows: frame2.rows,
+        softness: 4 + 40 * frame2.softness,
+        skew: Math.tan(clamp(frame2.slant, -35, 35) * Math.PI / 180)
+      }
+    });
+    const ref = Math.max(0, -direction[2]);
+    rig.exposure = ref > 0 ? SETTINGS.intensity / ref : 0;
+    return rig;
+  }
+  function ambientLevel() {
+    const p = paper();
+    const floor = p.appearance === "light" ? 0.64 : 0.68;
+    return Math.min(1, Math.max(floor, 1 - theme().light.shade * (0.55 + 0.45 * SETTINGS.intensity)));
+  }
 
-/* ═══════════════════════════════════════════════════════════════════════════
-   4 · 纸：lib/nocturne/lighting/paper-light.ts 的双通道着色器（GLSL 原样）
-   ═══════════════════════════════════════════════════════════════════════ */
-const VERTEX = `#version 300 es
+  // packages/dsh-nocturne/src/core/shaders.js
+  var VERTEX = `#version 300 es
 in vec2 aPos;
 void main() { gl_Position = vec4(aPos, 0.0, 1.0); }`;
-
-const NOISE = `
+  var NOISE = `
 float hash12(vec2 p) { vec3 p3 = fract(vec3(p.xyx) * 0.1031); p3 += dot(p3, p3.yzx + 33.33); return fract((p3.x + p3.y) * p3.z); }
 float noise(vec2 p) {
   vec2 i = floor(p); vec2 f = fract(p); vec2 u = f * f * f * (f * (f * 6.0 - 15.0) + 10.0);
@@ -937,8 +961,7 @@ float noise(vec2 p) {
 }
 float fbm(vec2 p) { float v = 0.0; float a = 0.5; for (int i = 0; i < 5; i++) { v += a * noise(p); p = p * 2.03 + 17.1; a *= 0.5; } return v; }
 `;
-
-const SURFACE = `#version 300 es
+  var SURFACE = `#version 300 es
 precision highp float;
 uniform vec2 uSize; uniform float uScale; uniform float uSeed; uniform float uFold; uniform float uFelt;
 uniform float uAge; uniform float uMottle; uniform float uCrinkle; uniform float uLaid; uniform float uLinen;
@@ -1010,8 +1033,7 @@ void main() {
   outAlbedo = vec4(albedo(p), 1.0);
   outNormal = vec4(n.xy * 0.5 + 0.5, 0.0, 1.0);
 }`;
-
-const LIGHT = `#version 300 es
+  var LIGHT = `#version 300 es
 precision highp float;
 uniform sampler2D uAlbedo; uniform sampler2D uNormal;
 uniform vec2 uSize; uniform float uScale; uniform int uSource;
@@ -1061,1714 +1083,1668 @@ void main() {
   outColor = vec4(clamp(albedo * irr + g * (uGrain * 0.045 + 1.5 / 255.0), 0.0, 1.0), 1.0);
 }`;
 
-class PaperLight {
-  constructor(canvas) {
-    this.canvas = canvas;
-    this.gl = canvas.getContext('webgl2', {premultipliedAlpha:false, antialias:false});
-    this.state = this.gl ? 'ready' : 'failed';
-    this.spec = null;
-    this.textures = [];
-    this.framebuffer = null;
-    if (!this.gl) return;
-    try {
-      this.surfaceProgram = this.program(SURFACE);
-      this.lightProgram = this.program(LIGHT);
-      const buffer = this.gl.createBuffer();
-      this.gl.bindBuffer(this.gl.ARRAY_BUFFER, buffer);
-      this.gl.bufferData(this.gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), this.gl.STATIC_DRAW);
-      this.gl.enableVertexAttribArray(0);
-      this.gl.vertexAttribPointer(0, 2, this.gl.FLOAT, false, 0, 0);
-      this.su = this.locate(this.surfaceProgram, ['uSize','uScale','uSeed','uFold','uFelt','uAge','uMottle','uCrinkle','uLaid','uLinen','uPaper']);
-      this.lu = this.locate(this.lightProgram, ['uAlbedo','uNormal','uSize','uScale','uSource','uLightPos','uLightDir','uCone','uExposure','uWindow','uPanes','uTint','uLamp','uAmbient','uAmbientTint','uRelief','uCrinkle','uGrain','uTime','uSoft']);
-    } catch (error) {
-      console.warn('paper light disabled:', error.message);
-      this.state = 'failed';
+  // packages/dsh-nocturne/src/core/paper-light.js
+  var PaperLight = class {
+    constructor(canvas) {
+      this.canvas = canvas;
+      this.gl = canvas.getContext("webgl2", { premultipliedAlpha: false, antialias: false });
+      this.state = this.gl ? "initializing" : "failed";
+      this.spec = null;
+      this.textures = [];
+      this.framebuffer = null;
+      this.buffer = null;
+      if (this.gl) this.initialize();
     }
-  }
-  program(fragment) {
-    const gl = this.gl;
-    const program = gl.createProgram();
-    const sources = [[gl.VERTEX_SHADER, VERTEX], [gl.FRAGMENT_SHADER, fragment]];
-    for (const pair of sources) {
-      const shader = gl.createShader(pair[0]);
-      gl.shaderSource(shader, pair[1]);
-      gl.compileShader(shader);
-      if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(shader));
-      gl.attachShader(program, shader);
-    }
-    gl.bindAttribLocation(program, 0, 'aPos');
-    gl.linkProgram(program);
-    if (!gl.getProgramParameter(program, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(program));
-    return program;
-  }
-  locate(program, names) {
-    const out = {};
-    for (const name of names) out[name] = this.gl.getUniformLocation(program, name);
-    return out;
-  }
-  build(spec) {
-    const gl = this.gl;
-    if (this.state !== 'ready') return;
-    const paperDef = spec.p;
-    const width = Math.max(1, Math.round(spec.width * spec.pixelRatio));
-    const height = Math.max(1, Math.round(spec.height * spec.pixelRatio));
-    this.canvas.width = width;
-    this.canvas.height = height;
-    this.spec = spec;
-    this.release();
-    const framebuffer = gl.createFramebuffer();
-    gl.bindFramebuffer(gl.FRAMEBUFFER, framebuffer);
-    for (let i = 0; i < 2; i++) {
-      const texture = gl.createTexture();
-      gl.bindTexture(gl.TEXTURE_2D, texture);
-      gl.texStorage2D(gl.TEXTURE_2D, 1, gl.RGBA8, width, height);
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
-      gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0 + i, gl.TEXTURE_2D, texture, 0);
-      this.textures.push(texture);
-    }
-    gl.drawBuffers([gl.COLOR_ATTACHMENT0, gl.COLOR_ATTACHMENT1]);
-    this.framebuffer = framebuffer;
-
-    const u = this.su;
-    gl.useProgram(this.surfaceProgram);
-    gl.viewport(0, 0, width, height);
-    gl.uniform2f(u.uSize, spec.width, spec.height);
-    gl.uniform1f(u.uScale, spec.pixelRatio);
-    gl.uniform1f(u.uSeed, 3.7);
-    gl.uniform1f(u.uFold, spec.height * 0.38);
-    // 纸纹的低频结构按纸的物理尺寸缩放：TN 的着色器是按 ~660×620 的纸调的，
-    // 同样的频率铺到 1200px 的纸上，斑块就碎成了噪点。
-    gl.uniform1f(u.uPaper, clamp(Math.sqrt(spec.width * spec.height) / 700, 0.9, 1.9));
-    gl.uniform1f(u.uFelt, paperDef.surface.felt);
-    gl.uniform1f(u.uAge, paperDef.surface.age);
-    gl.uniform1f(u.uMottle, paperDef.surface.mottle);
-    gl.uniform1f(u.uCrinkle, paperDef.surface.crinkle * SETTINGS.texture);
-    gl.uniform1f(u.uLaid, paperDef.surface.laid * Math.min(1, SETTINGS.texture));
-    gl.uniform1f(u.uLinen, paperDef.surface.linen * Math.min(1, SETTINGS.texture));
-    gl.drawArrays(gl.TRIANGLES, 0, 3);
-    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-  }
-  render(rig, paperDef, time) {
-    const gl = this.gl;
-    const u = this.lu;
-    if (!this.spec || this.state !== 'ready' || gl.isContextLost()) return;
-    const lightColor = toUnit(theme().light.color);
-    const peak = Math.max(lightColor[0], lightColor[1], lightColor[2], 1e-6);
-    const room = toUnit(theme().palette.room);
-    const strength = rig.source === 'moonlight' ? .75 : .4;
-    const tintChannel = (c) => 1 + ((.6 + c * 1.5) - 1) * strength;
-
-    gl.useProgram(this.lightProgram);
-    gl.viewport(0, 0, this.canvas.width, this.canvas.height);
-    gl.activeTexture(gl.TEXTURE0);
-    gl.bindTexture(gl.TEXTURE_2D, this.textures[0]);
-    gl.activeTexture(gl.TEXTURE1);
-    gl.bindTexture(gl.TEXTURE_2D, this.textures[1]);
-    gl.uniform1i(u.uAlbedo, 0);
-    gl.uniform1i(u.uNormal, 1);
-    gl.uniform2f(u.uSize, this.spec.width, this.spec.height);
-    gl.uniform1f(u.uScale, this.spec.pixelRatio);
-    gl.uniform1i(u.uSource, {carriage:0, 'desk-lamp':1, moonlight:2}[rig.source]);
-    gl.uniform3fv(u.uLightPos, rig.position);
-    gl.uniform3fv(u.uLightDir, rig.direction);
-    gl.uniform2f(u.uCone, rig.cosOuter, rig.cosInner);
-    gl.uniform1f(u.uExposure, rig.exposure);
-    gl.uniform4f(u.uWindow, rig.window.x, rig.window.y, rig.window.width, rig.window.height);
-    gl.uniform4f(u.uPanes, rig.window.columns, rig.window.rows, rig.window.softness, rig.window.skew);
-    gl.uniform3f(u.uTint, lightColor[0] / peak, lightColor[1] / peak, lightColor[2] / peak);
-    gl.uniform1f(u.uLamp, SETTINGS.lamp && SETTINGS.enabled ? 1 : 0);
-    gl.uniform1f(u.uAmbient, ambientLevel());
-    gl.uniform3f(u.uAmbientTint, tintChannel(room[0]), tintChannel(room[1]), tintChannel(room[2]));
-    gl.uniform1f(u.uRelief, 2 * SETTINGS.paperIllumination);
-    gl.uniform1f(u.uSoft, SETTINGS.beam === 'soft' ? 1 : 0);
-    gl.uniform1f(u.uCrinkle, paperDef.surface.crinkle * SETTINGS.texture);
-    gl.uniform1f(u.uGrain, reduceMotion ? 0 : SETTINGS.grain);
-    gl.uniform1f(u.uTime, time);
-    gl.drawArrays(gl.TRIANGLES, 0, 3);
-  }
-  release() {
-    if (!this.gl) return;
-    this.textures.forEach((texture) => this.gl.deleteTexture(texture));
-    this.textures = [];
-    if (this.framebuffer) { this.gl.deleteFramebuffer(this.framebuffer); this.framebuffer = null; }
-  }
-}
-
-/* ═══════════════════════════════════════════════════════════════════════════
-   5 · 辉光：lighting/glow-layer.ts
-   ═══════════════════════════════════════════════════════════════════════ */
-const MOTE_HASH = (n) => { const s = Math.sin(n * 127.1 + 311.7) * 43758.5453; return s - Math.floor(s); };
-const MOTES = Array.from({length:110}, (_, i) => ({
-  x:MOTE_HASH(i*3.1), y:MOTE_HASH(i*7.7), z:MOTE_HASH(i*1.9),
-  phase:MOTE_HASH(i*5.3)*100, size:.5 + MOTE_HASH(i*9.1)*1.6
-}));
-const wrap01 = (v) => ((v % 1) + 1) % 1;
-const POOL_COLUMNS = 192;
-
-function poolStrength(rig, appearance) {
-  if (appearance === 'dark') return 1;
-  if (rig.source === 'moonlight') return .2;
-  return rig.source === 'desk-lamp' ? .1 : 0;
-}
-
-/**
- * screen 层的池色。亮纸上纸光已经把灯画出来了，池只负责月光与台灯的余温，用灯色即可；
- * 暗纸上池是唯一有光的地方，若照搬灯色 × 纸色，screen 会直接烧成一片白（实测过），
- * 所以取灯色的 34%——暖，但不刺眼。
- */
-function poolColor(appearance) {
-  const light = toUnit(theme().light.color).map((c) => Math.round(c * 255));
-  return appearance === 'dark' ? light.map((c) => Math.round(c * 0.34)) : light;
-}
-
-class GlowLayer {
-  constructor(canvas) {
-    this.canvas = canvas;
-    this.context = canvas.getContext('2d');
-    this.width = 0; this.height = 0; this.pixelRatio = 1;
-    this.pool = document.createElement('canvas');
-    this.soft = document.createElement('canvas');
-    this.bloom = document.createElement('canvas');
-    this.poolKey = '';
-    this.sprite = document.createElement('canvas');
-    this.sprite.width = this.sprite.height = 32;
-    const s = this.sprite.getContext('2d');
-    const g = s.createRadialGradient(16, 16, 0, 16, 16, 16);
-    g.addColorStop(0, 'rgba(255,255,255,1)');
-    g.addColorStop(.22, 'rgba(255,255,255,.6)');
-    g.addColorStop(1, 'rgba(255,255,255,0)');
-    s.fillStyle = g;
-    s.fillRect(0, 0, 32, 32);
-  }
-  resize(width, height, pixelRatio) {
-    this.width = width; this.height = height; this.pixelRatio = pixelRatio;
-    this.canvas.width = Math.max(1, Math.round(width * pixelRatio));
-    this.canvas.height = Math.max(1, Math.round(height * pixelRatio));
-    this.poolKey = '';
-  }
-  ensurePool(rig, rgb) {
-    const key = JSON.stringify([rig.position, rig.direction, rig.cosOuter, rig.cosInner, rig.exposure, rig.window, rgb, this.width, this.height]);
-    if (key === this.poolKey) return;
-    this.poolKey = key;
-    const columns = POOL_COLUMNS;
-    const rows = Math.max(8, Math.round((columns * this.height) / Math.max(1, this.width)));
-    const channels = rgb.split(',').map(Number);
-    for (const target of [this.pool, this.soft, this.bloom]) { target.width = columns; target.height = rows; }
-    const poolCtx = this.pool.getContext('2d');
-    const softCtx = this.soft.getContext('2d');
-    const bloomCtx = this.bloom.getContext('2d');
-    const image = poolCtx.createImageData(columns, rows);
-    for (let j = 0; j < rows; j++) {
-      for (let i = 0; i < columns; i++) {
-        const lit = lightAmount(rig, ((i + .5) / columns) * this.width, ((j + .5) / rows) * this.height);
-        const k = (j * columns + i) * 4;
-        image.data[k] = channels[0];
-        image.data[k+1] = channels[1];
-        image.data[k+2] = channels[2];
-        image.data[k+3] = Math.round(Math.min(1, lit) * 255);
+    /** 创建全部与 WebGL context 同寿命的资源。上下文恢复后必须完整重跑。 */
+    initialize() {
+      try {
+        this.surfaceProgram = this.program(SURFACE);
+        this.lightProgram = this.program(LIGHT);
+        this.buffer = this.gl.createBuffer();
+        this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.buffer);
+        this.gl.bufferData(this.gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), this.gl.STATIC_DRAW);
+        this.gl.enableVertexAttribArray(0);
+        this.gl.vertexAttribPointer(0, 2, this.gl.FLOAT, false, 0, 0);
+        this.su = this.locate(this.surfaceProgram, ["uSize", "uScale", "uSeed", "uFold", "uFelt", "uAge", "uMottle", "uCrinkle", "uLaid", "uLinen", "uPaper"]);
+        this.lu = this.locate(this.lightProgram, ["uAlbedo", "uNormal", "uSize", "uScale", "uSource", "uLightPos", "uLightDir", "uCone", "uExposure", "uWindow", "uPanes", "uTint", "uLamp", "uAmbient", "uAmbientTint", "uRelief", "uCrinkle", "uGrain", "uTime", "uSoft"]);
+        this.state = "ready";
+        return true;
+      } catch (error) {
+        console.warn("paper light disabled:", error.message);
+        this.state = "failed";
+        return false;
       }
     }
-    poolCtx.putImageData(image, 0, 0);
-    softCtx.filter = 'blur(1px)'; softCtx.drawImage(this.pool, 0, 0); softCtx.filter = 'none';
-    bloomCtx.filter = 'blur(6px)'; bloomCtx.drawImage(this.pool, 0, 0); bloomCtx.filter = 'none';
-  }
-  clear() {
-    const c = this.context;
-    if (!c) return;
-    c.setTransform(1, 0, 0, 1, 0, 0);
-    c.clearRect(0, 0, this.canvas.width, this.canvas.height);
-  }
-  render(frame) {
-    const c = this.context;
-    if (!c) return;
-    c.setTransform(this.pixelRatio, 0, 0, this.pixelRatio, 0, 0);
-    c.clearRect(0, 0, this.width, this.height);
-    if (!frame.lamp) return;
-    const rig = frame.rig;
-    const pool = poolStrength(rig, frame.appearance);
-    if (pool > 0) {
-      this.ensurePool(rig, frame.poolRgb);
-      c.imageSmoothingEnabled = true;
-      c.imageSmoothingQuality = 'high';
-      c.globalAlpha = pool;
-      c.drawImage(this.soft, 0, 0, this.width, this.height);
-      c.globalAlpha = pool * (frame.appearance === 'dark' ? .4 : .8);
-      c.drawImage(this.bloom, 0, 0, this.width, this.height);
-      c.globalAlpha = 1;
+    invalidate() {
+      this.spec = null;
+      this.textures = [];
+      this.framebuffer = null;
+      this.buffer = null;
+      this.state = "lost";
     }
-    if (rig.source === 'desk-lamp') {
-      const x = rig.position[0], y = rig.position[1];
-      const radius = Math.max(1, this.height * .55);
-      const spill = c.createRadialGradient(x, y, 0, x, y, radius);
-      spill.addColorStop(0, 'rgba(' + frame.rgb + ', ' + (frame.appearance === 'light' ? .1 : .16) + ')');
-      spill.addColorStop(1, 'rgba(' + frame.rgb + ', 0)');
-      c.fillStyle = spill;
-      c.fillRect(x - radius, y - radius, radius * 2, radius * 2);
-    }
-    if (frame.particles > 0) {
-      const count = Math.round(MOTES.length * frame.particles);
-      const strength = frame.appearance === 'light' ? .5 : .9;
-      for (let i = 0; i < count; i++) {
-        const m = MOTES[i];
-        const speed = .4 + m.z;
-        const drift = Math.sin(frame.time * .05 * speed + m.phase) * .04 + frame.time * .004 * (m.z - .5);
-        const fall = -frame.time * .006 * speed + Math.cos(frame.time * .07 + m.phase) * .03;
-        const x = wrap01(m.x + drift) * this.width;
-        const y = wrap01(m.y + fall) * this.height;
-        const lit = lightAmount(rig, x, y);
-        if (lit < .05) continue;
-        const twinkle = .5 + .5 * Math.sin(frame.time * (.8 + m.z * 2.2) + m.phase);
-        const size = m.size * (1 + m.z * 1.6);
-        c.globalAlpha = Math.min(1, lit * twinkle * strength);
-        c.drawImage(this.sprite, x - size * 2, y - size * 2, size * 4, size * 4);
+    restore() {
+      if (!this.gl) {
+        this.state = "failed";
+        return false;
       }
-      c.globalAlpha = 1;
+      this.invalidate();
+      return this.initialize();
     }
-    if (rig.source === 'carriage') {
-      const x = rig.position[0], y = rig.position[1];
-      const radius = Math.max(1, 110 * frame.intensity);
-      const glare = c.createRadialGradient(x, y, 0, x, y, radius);
-      glare.addColorStop(0, 'rgba(' + frame.rgb + ', ' + (frame.appearance === 'light' ? .26 : .45) + ')');
-      glare.addColorStop(1, 'rgba(' + frame.rgb + ', 0)');
-      c.fillStyle = glare;
-      c.fillRect(x - radius, y - radius, radius * 2, radius * 2);
+    program(fragment) {
+      const gl = this.gl;
+      const program = gl.createProgram();
+      const sources = [[gl.VERTEX_SHADER, VERTEX], [gl.FRAGMENT_SHADER, fragment]];
+      for (const pair of sources) {
+        const shader = gl.createShader(pair[0]);
+        gl.shaderSource(shader, pair[1]);
+        gl.compileShader(shader);
+        if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(shader));
+        gl.attachShader(program, shader);
+      }
+      gl.bindAttribLocation(program, 0, "aPos");
+      gl.linkProgram(program);
+      if (!gl.getProgramParameter(program, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(program));
+      return program;
     }
-    if (frame.cursor && frame.cursorGlow > 0) {
-      const x = frame.cursor.x, y = frame.cursor.y;
-      const glow = c.createRadialGradient(x, y, 0, x, y, 34);
-      glow.addColorStop(0, 'rgba(' + frame.rgb + ', ' + (.4 * frame.cursorGlow).toFixed(3) + ')');
-      glow.addColorStop(1, 'rgba(' + frame.rgb + ', 0)');
-      c.fillStyle = glow;
-      c.fillRect(x - 34, y - 34, 68, 68);
+    locate(program, names) {
+      const out = {};
+      for (const name of names) out[name] = this.gl.getUniformLocation(program, name);
+      return out;
     }
-  }
-}
-
-/* ═══════════════════════════════════════════════════════════════════════════
-   5.5 · 墨迹光标：lib/nocturne/components/block-cursor.tsx 的移植
-   一块洇进纸里的墨：边缘软、边上稍深（墨积在那里）、底下那个字用纸色反白。
-   它躺在纸光之下，所以灯把它和字一起照亮。等的时候往纸里沉再涌上来，
-   沉下去时一圈淡淡的光晕散开；每敲一下，墨重新压进格子。
-   ═══════════════════════════════════════════════════════════════════════ */
-const BREATH_MS = 1700;
-const REST_MS = 650;
-
-/** 一口气：停住 → 沉进纸里 → 淡着躺一会 → 涌回来 */
-const SINK = [
-  {opacity: 1, offset: 0},
-  {opacity: 1, offset: 0.36, easing: 'cubic-bezier(0.4, 0, 0.6, 1)'},
-  {opacity: 0.08, offset: 0.62},
-  {opacity: 0.08, offset: 0.74, easing: 'cubic-bezier(0.3, 0, 0.3, 1)'},
-  {opacity: 1, offset: 1}
-];
-/** 墨往下沉的同时，一圈光晕散开、被纸吸走 */
-const SPREAD = [
-  {opacity: 0, transform: 'scale(1)', offset: 0},
-  {opacity: 0, transform: 'scale(1)', offset: 0.36, easing: 'ease-out'},
-  {opacity: 0.3, transform: 'scale(1.2)', offset: 0.52, easing: 'ease-in'},
-  {opacity: 0, transform: 'scale(1.55)', offset: 0.74},
-  {opacity: 0, transform: 'scale(1)', offset: 1}
-];
-/** 一次击键：新墨压进格子 */
-const FRESH = [{transform: 'scale(1.12)'}, {transform: 'scale(1)'}];
-const FRESH_HALO = [{opacity: 0.35, transform: 'scale(1.3)'}, {opacity: 0, transform: 'scale(1)'}];
-
-/**
- * 光标下的那个字。
- *
- * 早先用 firstChild / nextSibling / parentNode 手工爬树，输入框删到空的时候锚点会变成
- * 编辑器元素本身，那套逻辑就爬出了编辑器、开始遍历整页——单帧卡 1.1 秒，界面直接假死。
- * 现在只做一件事：把"光标到编辑器末尾"这段文本取出来读第一个字。原地完成，永远出不去。
- */
-function glyphAfter(editor, range) {
-  try {
-    if (!editor || !range || !editor.contains(range.startContainer)) return '';
-    if (!editor.textContent) return '';
-    const rest = document.createRange();
-    rest.setStart(range.startContainer, range.startOffset);
-    rest.setEnd(editor, editor.childNodes.length);
-    const text = rest.toString();
-    return text ? text.charAt(0) : '';
-  } catch (error) {
-    return '';
-  }
-}
-
-/** 一个字的自然宽度：中日韩约 1em，拉丁约半 em。墨块按它取宽，字才不会挤出格子。 */
-function advanceOf(context, char) {
-  if (!char) return 0;
-  const width = context.measureText(char).width;
-  return Number.isFinite(width) ? width : 0;
-}
-
-function isEditor(element) {
-  if (!element || element.nodeType !== 1) return false;
-  const tag = element.tagName;
-  return tag === 'INPUT' || tag === 'TEXTAREA' || element.isContentEditable;
-}
-
-/** 当前该跟的那个输入框：优先焦点元素，其次选区所在的编辑区。 */
-function activeEditor() {
-  const focused = document.activeElement;
-  if (isEditor(focused)) return focused;
-  const selection = window.getSelection();
-  let node = selection && selection.anchorNode;
-  while (node && node !== document.body) {
-    if (node.nodeType === 1 && node.isContentEditable) return node;
-    node = node.parentNode;
-  }
-  return null;
-}
-
-class InkCaret {
-  constructor() {
-    this.enabled = true;
-    this.reduce = window.matchMedia('(prefers-reduced-motion: reduce)');
-    this.element = document.createElement('div');
-    this.element.className = 'dn-caret';
-    this.element.setAttribute('aria-hidden', 'true');
-    this.halo = document.createElement('div');
-    this.halo.className = 'dn-ink-halo';
-    this.blot = document.createElement('div');
-    this.blot.className = 'dn-ink-blot';
-    this.glyph = document.createElement('span');
-    this.glyph.className = 'dn-ink-glyph';
-    this.element.append(this.halo, this.blot, this.glyph);
-    this.breathing = [];
-    this.inComposition = false;
-    this.shown = false;
-    this.editor = null;
-    this.lastInkAt = 0;
-    this.dirty = true;
-    this.lastMeasure = 0;
-    this.point = {x: 0, y: 0, height: 18};
-  }
-
-  /** 挂到 body 上。调用方负责把它插在两个纸层之前——它必须躺在纸光之下。 */
-  mount(before) {
-    this.quillEl = buildQuill();
-    this.mode = 'ink';
-    if (before && before.parentNode) {
-      // 两件器物都要躺在纸光之下：插在纸层之前，z-index 也只差一档。
-      before.parentNode.insertBefore(this.quillEl, before);
-      before.parentNode.insertBefore(this.element, before);
-    } else {
-      document.body.appendChild(this.quillEl);
-      document.body.appendChild(this.element);
+    build(spec) {
+      const gl = this.gl;
+      if (this.state !== "ready") return;
+      const paperDef = spec.p;
+      const width = Math.max(1, Math.round(spec.width * spec.pixelRatio));
+      const height = Math.max(1, Math.round(spec.height * spec.pixelRatio));
+      this.canvas.width = width;
+      this.canvas.height = height;
+      this.spec = spec;
+      this.release();
+      const framebuffer = gl.createFramebuffer();
+      gl.bindFramebuffer(gl.FRAMEBUFFER, framebuffer);
+      for (let i = 0; i < 2; i++) {
+        const texture = gl.createTexture();
+        gl.bindTexture(gl.TEXTURE_2D, texture);
+        gl.texStorage2D(gl.TEXTURE_2D, 1, gl.RGBA8, width, height);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+        gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0 + i, gl.TEXTURE_2D, texture, 0);
+        this.textures.push(texture);
+      }
+      gl.drawBuffers([gl.COLOR_ATTACHMENT0, gl.COLOR_ATTACHMENT1]);
+      this.framebuffer = framebuffer;
+      const u = this.su;
+      gl.useProgram(this.surfaceProgram);
+      gl.viewport(0, 0, width, height);
+      gl.uniform2f(u.uSize, spec.width, spec.height);
+      gl.uniform1f(u.uScale, spec.pixelRatio);
+      gl.uniform1f(u.uSeed, 3.7);
+      gl.uniform1f(u.uFold, spec.height * 0.38);
+      gl.uniform1f(u.uPaper, clamp(Math.sqrt(spec.width * spec.height) / 700, 0.9, 1.9));
+      gl.uniform1f(u.uFelt, paperDef.surface.felt);
+      gl.uniform1f(u.uAge, paperDef.surface.age);
+      gl.uniform1f(u.uMottle, paperDef.surface.mottle);
+      gl.uniform1f(u.uCrinkle, paperDef.surface.crinkle * SETTINGS.texture);
+      gl.uniform1f(u.uLaid, paperDef.surface.laid * Math.min(1, SETTINGS.texture));
+      gl.uniform1f(u.uLinen, paperDef.surface.linen * Math.min(1, SETTINGS.texture));
+      gl.drawArrays(gl.TRIANGLES, 0, 3);
+      gl.bindFramebuffer(gl.FRAMEBUFFER, null);
     }
-    this.onSelection = () => { this.dirty = true; this.sync(); };
-    this.onKey = () => { this.dirty = true; this.ink(); };
-    this.onAny = () => { this.dirty = true; };
-    this.onScroll = () => { this.dirty = true; };
-    this.onCompositionStart = () => { this.inComposition = true; this.releaseNative(); };
-    this.onCompositionEnd = () => { this.inComposition = false; this.sync(); };
-    this.onBlur = () => { this.hide(); };
-    document.addEventListener('selectionchange', this.onSelection);
-    document.addEventListener('keydown', this.onKey, true);
-    document.addEventListener('input', this.onAny, true);
-    document.addEventListener('compositionstart', this.onCompositionStart, true);
-    document.addEventListener('compositionend', this.onCompositionEnd, true);
-    window.addEventListener('blur', this.onBlur);
-    window.addEventListener('resize', this.onAny);
-    window.addEventListener('scroll', this.onScroll, true);
-    this.breathe();
-  }
+    render(rig, paperDef, time) {
+      const gl = this.gl;
+      const u = this.lu;
+      if (!this.spec || this.state !== "ready" || gl.isContextLost()) return;
+      const lightColor = toUnit(theme().light.color);
+      const peak = Math.max(lightColor[0], lightColor[1], lightColor[2], 1e-6);
+      const room = toUnit(theme().palette.room);
+      const strength = rig.source === "moonlight" ? 0.75 : 0.4;
+      const tintChannel = (c) => 1 + (0.6 + c * 1.5 - 1) * strength;
+      gl.useProgram(this.lightProgram);
+      gl.viewport(0, 0, this.canvas.width, this.canvas.height);
+      gl.activeTexture(gl.TEXTURE0);
+      gl.bindTexture(gl.TEXTURE_2D, this.textures[0]);
+      gl.activeTexture(gl.TEXTURE1);
+      gl.bindTexture(gl.TEXTURE_2D, this.textures[1]);
+      gl.uniform1i(u.uAlbedo, 0);
+      gl.uniform1i(u.uNormal, 1);
+      gl.uniform2f(u.uSize, this.spec.width, this.spec.height);
+      gl.uniform1f(u.uScale, this.spec.pixelRatio);
+      gl.uniform1i(u.uSource, { carriage: 0, "desk-lamp": 1, moonlight: 2 }[rig.source]);
+      gl.uniform3fv(u.uLightPos, rig.position);
+      gl.uniform3fv(u.uLightDir, rig.direction);
+      gl.uniform2f(u.uCone, rig.cosOuter, rig.cosInner);
+      gl.uniform1f(u.uExposure, rig.exposure);
+      gl.uniform4f(u.uWindow, rig.window.x, rig.window.y, rig.window.width, rig.window.height);
+      gl.uniform4f(u.uPanes, rig.window.columns, rig.window.rows, rig.window.softness, rig.window.skew);
+      gl.uniform3f(u.uTint, lightColor[0] / peak, lightColor[1] / peak, lightColor[2] / peak);
+      gl.uniform1f(u.uLamp, SETTINGS.lamp && SETTINGS.enabled ? 1 : 0);
+      gl.uniform1f(u.uAmbient, ambientLevel());
+      gl.uniform3f(u.uAmbientTint, tintChannel(room[0]), tintChannel(room[1]), tintChannel(room[2]));
+      gl.uniform1f(u.uRelief, 2 * SETTINGS.paperIllumination);
+      gl.uniform1f(u.uSoft, SETTINGS.beam === "soft" ? 1 : 0);
+      gl.uniform1f(u.uCrinkle, paperDef.surface.crinkle * SETTINGS.texture);
+      gl.uniform1f(u.uGrain, reduceMotion ? 0 : SETTINGS.grain);
+      gl.uniform1f(u.uTime, time);
+      gl.drawArrays(gl.TRIANGLES, 0, 3);
+    }
+    release() {
+      if (!this.gl) return;
+      this.textures.forEach((texture) => this.gl.deleteTexture(texture));
+      this.textures = [];
+      if (this.framebuffer) {
+        this.gl.deleteFramebuffer(this.framebuffer);
+        this.framebuffer = null;
+      }
+    }
+    destroy() {
+      this.release();
+      if (this.buffer) this.gl.deleteBuffer(this.buffer);
+      if (this.surfaceProgram) this.gl.deleteProgram(this.surfaceProgram);
+      if (this.lightProgram) this.gl.deleteProgram(this.lightProgram);
+      this.buffer = null;
+      this.spec = null;
+      this.state = "disposed";
+    }
+  };
 
-  destroy() {
-    document.removeEventListener('selectionchange', this.onSelection);
-    document.removeEventListener('keydown', this.onKey, true);
-    document.removeEventListener('input', this.onAny, true);
-    document.removeEventListener('compositionstart', this.onCompositionStart, true);
-    document.removeEventListener('compositionend', this.onCompositionEnd, true);
-    window.removeEventListener('blur', this.onBlur);
-    window.removeEventListener('resize', this.onAny);
-    window.removeEventListener('scroll', this.onScroll, true);
-    this.releaseNative();
-    this.breathing.forEach((animation) => animation.cancel());
-    if (this.element.parentNode) this.element.remove();
-    if (this.quillEl && this.quillEl.parentNode) this.quillEl.remove();
+  // packages/dsh-nocturne/src/core/glow-layer.js
+  var MOTE_HASH = (n) => {
+    const s = Math.sin(n * 127.1 + 311.7) * 43758.5453;
+    return s - Math.floor(s);
+  };
+  var MOTES = Array.from({ length: 110 }, (_, i) => ({
+    x: MOTE_HASH(i * 3.1),
+    y: MOTE_HASH(i * 7.7),
+    z: MOTE_HASH(i * 1.9),
+    phase: MOTE_HASH(i * 5.3) * 100,
+    size: 0.5 + MOTE_HASH(i * 9.1) * 1.6
+  }));
+  var wrap01 = (v) => (v % 1 + 1) % 1;
+  var POOL_COLUMNS = 192;
+  function poolStrength(rig, appearance) {
+    if (appearance === "dark") return 1;
+    if (rig.source === "moonlight") return 0.2;
+    return rig.source === "desk-lamp" ? 0.1 : 0;
   }
+  function poolColor(appearance) {
+    const light = toUnit(theme().light.color).map((c) => Math.round(c * 255));
+    return appearance === "dark" ? light.map((c) => Math.round(c * 0.34)) : light;
+  }
+  var GlowLayer = class {
+    constructor(canvas) {
+      this.canvas = canvas;
+      this.context = canvas.getContext("2d");
+      this.width = 0;
+      this.height = 0;
+      this.pixelRatio = 1;
+      this.pool = document.createElement("canvas");
+      this.soft = document.createElement("canvas");
+      this.bloom = document.createElement("canvas");
+      this.poolKey = "";
+      this.sprite = document.createElement("canvas");
+      this.sprite.width = this.sprite.height = 32;
+      const s = this.sprite.getContext("2d");
+      const g = s.createRadialGradient(16, 16, 0, 16, 16, 16);
+      g.addColorStop(0, "rgba(255,255,255,1)");
+      g.addColorStop(0.22, "rgba(255,255,255,.6)");
+      g.addColorStop(1, "rgba(255,255,255,0)");
+      s.fillStyle = g;
+      s.fillRect(0, 0, 32, 32);
+    }
+    resize(width, height, pixelRatio) {
+      if (this.width === width && this.height === height && this.pixelRatio === pixelRatio) return;
+      this.width = width;
+      this.height = height;
+      this.pixelRatio = pixelRatio;
+      this.canvas.width = Math.max(1, Math.round(width * pixelRatio));
+      this.canvas.height = Math.max(1, Math.round(height * pixelRatio));
+      this.poolKey = "";
+    }
+    ensurePool(rig, rgb) {
+      const key = JSON.stringify([rig.position, rig.direction, rig.cosOuter, rig.cosInner, rig.exposure, rig.window, rgb, this.width, this.height]);
+      if (key === this.poolKey) return;
+      this.poolKey = key;
+      const columns = POOL_COLUMNS;
+      const rows = Math.max(8, Math.round(columns * this.height / Math.max(1, this.width)));
+      const channels = rgb.split(",").map(Number);
+      for (const target of [this.pool, this.soft, this.bloom]) {
+        target.width = columns;
+        target.height = rows;
+      }
+      const poolCtx = this.pool.getContext("2d");
+      const softCtx = this.soft.getContext("2d");
+      const bloomCtx = this.bloom.getContext("2d");
+      const image = poolCtx.createImageData(columns, rows);
+      for (let j = 0; j < rows; j++) {
+        for (let i = 0; i < columns; i++) {
+          const lit = lightAmount(rig, (i + 0.5) / columns * this.width, (j + 0.5) / rows * this.height);
+          const k = (j * columns + i) * 4;
+          image.data[k] = channels[0];
+          image.data[k + 1] = channels[1];
+          image.data[k + 2] = channels[2];
+          image.data[k + 3] = Math.round(Math.min(1, lit) * 255);
+        }
+      }
+      poolCtx.putImageData(image, 0, 0);
+      softCtx.filter = "blur(1px)";
+      softCtx.drawImage(this.pool, 0, 0);
+      softCtx.filter = "none";
+      bloomCtx.filter = "blur(6px)";
+      bloomCtx.drawImage(this.pool, 0, 0);
+      bloomCtx.filter = "none";
+    }
+    clear() {
+      const c = this.context;
+      if (!c) return;
+      c.setTransform(1, 0, 0, 1, 0, 0);
+      c.clearRect(0, 0, this.canvas.width, this.canvas.height);
+    }
+    render(frame2) {
+      const c = this.context;
+      if (!c) return;
+      c.setTransform(this.pixelRatio, 0, 0, this.pixelRatio, 0, 0);
+      c.clearRect(0, 0, this.width, this.height);
+      if (!frame2.lamp) return;
+      const rig = frame2.rig;
+      const pool = poolStrength(rig, frame2.appearance);
+      if (pool > 0) {
+        this.ensurePool(rig, frame2.poolRgb);
+        c.imageSmoothingEnabled = true;
+        c.imageSmoothingQuality = "high";
+        c.globalAlpha = pool;
+        c.drawImage(this.soft, 0, 0, this.width, this.height);
+        c.globalAlpha = pool * (frame2.appearance === "dark" ? 0.4 : 0.8);
+        c.drawImage(this.bloom, 0, 0, this.width, this.height);
+        c.globalAlpha = 1;
+      }
+      if (rig.source === "desk-lamp") {
+        const x = rig.position[0], y = rig.position[1];
+        const radius = Math.max(1, this.height * 0.55);
+        const spill = c.createRadialGradient(x, y, 0, x, y, radius);
+        spill.addColorStop(0, "rgba(" + frame2.rgb + ", " + (frame2.appearance === "light" ? 0.1 : 0.16) + ")");
+        spill.addColorStop(1, "rgba(" + frame2.rgb + ", 0)");
+        c.fillStyle = spill;
+        c.fillRect(x - radius, y - radius, radius * 2, radius * 2);
+      }
+      if (frame2.particles > 0) {
+        const count = Math.round(MOTES.length * frame2.particles);
+        const strength = frame2.appearance === "light" ? 0.5 : 0.9;
+        for (let i = 0; i < count; i++) {
+          const m = MOTES[i];
+          const speed = 0.4 + m.z;
+          const drift = Math.sin(frame2.time * 0.05 * speed + m.phase) * 0.04 + frame2.time * 4e-3 * (m.z - 0.5);
+          const fall = -frame2.time * 6e-3 * speed + Math.cos(frame2.time * 0.07 + m.phase) * 0.03;
+          const x = wrap01(m.x + drift) * this.width;
+          const y = wrap01(m.y + fall) * this.height;
+          const lit = lightAmount(rig, x, y);
+          if (lit < 0.05) continue;
+          const twinkle = 0.5 + 0.5 * Math.sin(frame2.time * (0.8 + m.z * 2.2) + m.phase);
+          const size = m.size * (1 + m.z * 1.6);
+          c.globalAlpha = Math.min(1, lit * twinkle * strength);
+          c.drawImage(this.sprite, x - size * 2, y - size * 2, size * 4, size * 4);
+        }
+        c.globalAlpha = 1;
+      }
+      if (rig.source === "carriage") {
+        const x = rig.position[0], y = rig.position[1];
+        const radius = Math.max(1, 110 * frame2.intensity);
+        const glare = c.createRadialGradient(x, y, 0, x, y, radius);
+        glare.addColorStop(0, "rgba(" + frame2.rgb + ", " + (frame2.appearance === "light" ? 0.26 : 0.45) + ")");
+        glare.addColorStop(1, "rgba(" + frame2.rgb + ", 0)");
+        c.fillStyle = glare;
+        c.fillRect(x - radius, y - radius, radius * 2, radius * 2);
+      }
+      if (frame2.cursor && frame2.cursorGlow > 0) {
+        const x = frame2.cursor.x, y = frame2.cursor.y;
+        const glow2 = c.createRadialGradient(x, y, 0, x, y, 34);
+        glow2.addColorStop(0, "rgba(" + frame2.rgb + ", " + (0.4 * frame2.cursorGlow).toFixed(3) + ")");
+        glow2.addColorStop(1, "rgba(" + frame2.rgb + ", 0)");
+        c.fillStyle = glow2;
+        c.fillRect(x - 34, y - 34, 68, 68);
+      }
+    }
+  };
 
-  /** 呼吸：停 REST_MS，再花 BREATH_MS 沉下去、涌回来，循环。 */
-  breathe() {
-    this.breathing.forEach((animation) => animation.cancel());
-    this.breathing = [];
-    if (this.reduce.matches) return;
-    const timing = {duration: BREATH_MS, delay: REST_MS, iterations: Infinity};
-    this.breathing = [
-      this.blot.animate(SINK, timing),
-      this.glyph.animate(SINK, timing),
-      this.halo.animate(SPREAD, timing)
+  // packages/dsh-nocturne/src/core/quill.js
+  var Q_VIEW = { left: 4, top: 74, width: 64, height: 78 };
+  var Q_LINES = 1.15;
+  var Q_NIB = { x: 0.15, y: 0.84 };
+  var Q_LEAN = 35;
+  var qRound = (value) => Number(value.toFixed(2));
+  function curveThrough(points) {
+    let d = "";
+    for (let i = 0; i < points.length - 1; i++) {
+      const p0 = points[Math.max(0, i - 1)];
+      const p1 = points[i];
+      const p2 = points[i + 1];
+      const p3 = points[Math.min(points.length - 1, i + 2)];
+      const c1 = [qRound(p1[0] + (p2[0] - p0[0]) / 6), qRound(p1[1] + (p2[1] - p0[1]) / 6)];
+      const c2 = [qRound(p2[0] - (p3[0] - p1[0]) / 6), qRound(p2[1] - (p3[1] - p1[1]) / 6)];
+      d += " C" + c1[0] + " " + c1[1] + " " + c2[0] + " " + c2[1] + " " + p2[0] + " " + p2[1];
+    }
+    return d;
+  }
+  var pathThrough = (points) => "M" + points[0][0] + " " + points[0][1] + curveThrough(points);
+  var Q_RACHIS = [[0, -24], [0.4, -46], [2.4, -70], [5.6, -90]];
+  function qAlong(t) {
+    const p0 = Q_RACHIS[0], p1 = Q_RACHIS[1], p2 = Q_RACHIS[2], p3 = Q_RACHIS[3];
+    const u = 1 - t;
+    const weights = [u * u * u, 3 * u * u * t, 3 * u * t * t, t * t * t];
+    const at = [0, 0];
+    Q_RACHIS.forEach((p, i) => {
+      at[0] += weights[i] * p[0];
+      at[1] += weights[i] * p[1];
+    });
+    const dx = 3 * u * u * (p1[0] - p0[0]) + 6 * u * t * (p2[0] - p1[0]) + 3 * t * t * (p3[0] - p2[0]);
+    const dy = 3 * u * u * (p1[1] - p0[1]) + 6 * u * t * (p2[1] - p1[1]) + 3 * t * t * (p3[1] - p2[1]);
+    const length = Math.hypot(dx, dy) || 1;
+    const tangent = [dx / length, dy / length];
+    return { at, tangent, normal: [-tangent[1], tangent[0]] };
+  }
+  var Q_VANE_FROM = 0.05;
+  var qGauss = (s, at, width) => Math.exp(-Math.pow((s - at) / width, 2));
+  var qTrailing = (s) => 8.4 * Math.pow(Math.sin(Math.PI * Math.pow(s, 0.75)), 0.85) * (1 - 0.3 * qGauss(s, 0.42, 0.018) - 0.24 * qGauss(s, 0.67, 0.016));
+  var qLeading = (s) => 3.4 * Math.pow(Math.sin(Math.PI * Math.pow(s, 0.65)), 0.9) * (1 - 0.32 * qGauss(s, 0.56, 0.02));
+  function qEdge(s, side, reach) {
+    const t = Q_VANE_FROM + (1 - Q_VANE_FROM) * s;
+    const curve = qAlong(t);
+    const width = (side > 0 ? qTrailing(s) : qLeading(s)) * (reach == null ? 1 : reach);
+    return [
+      qRound(curve.at[0] + curve.normal[0] * width * side + curve.tangent[0] * width * 0.38),
+      qRound(curve.at[1] + curve.normal[1] * width * side + curve.tangent[1] * width * 0.38)
     ];
   }
-
-  /** 一次击键：墨重新压进格子，呼吸从头开始。 */
-  ink() {
-    const now = performance.now();
-    if (now - this.lastInkAt < 24) return;
-    this.lastInkAt = now;
-    this.breathe();
-    if (this.reduce.matches || !this.shown) return;
-    this.blot.animate(FRESH, {duration: 160, easing: 'ease-out'});
-    this.halo.animate(FRESH_HALO, {duration: 240, easing: 'ease-out'});
+  var Q_SAMPLES = Array.from({ length: 61 }, (_, i) => i / 60);
+  var Q_VANE = (() => {
+    const leading = Q_SAMPLES.map((s) => qEdge(s, -1));
+    const trailing = Q_SAMPLES.slice().reverse().map((s) => qEdge(s, 1));
+    return pathThrough(leading.concat(trailing.slice(1))) + " Z";
+  })();
+  function qBarbs(side, count) {
+    let d = "";
+    for (let i = 0; i < count; i++) {
+      const s = 0.04 + i / (count - 1) * 0.9;
+      const curve = qAlong(Q_VANE_FROM + (1 - Q_VANE_FROM) * s);
+      const end = qEdge(Math.min(1, s + 0.05), side, 0.94);
+      const width = side > 0 ? qTrailing(s) : qLeading(s);
+      const control = [
+        qRound(curve.at[0] + curve.normal[0] * width * side * 0.55),
+        qRound(curve.at[1] + curve.normal[1] * width * side * 0.55)
+      ];
+      d += "M" + qRound(curve.at[0]) + " " + qRound(curve.at[1]) + " Q" + control[0] + " " + control[1] + " " + end[0] + " " + end[1] + " ";
+    }
+    return d.trim();
+  }
+  var Q_TRAILING_BARBS = qBarbs(1, 30);
+  var Q_LEADING_BARBS = qBarbs(-1, 22);
+  var Q_RACHIS_SHAPE = (() => {
+    const steps = Array.from({ length: 25 }, (_, i) => i / 24 * 0.98);
+    const side = (sign) => steps.map((t) => {
+      const curve = qAlong(t);
+      const half = 0.62 * (1 - t) + 0.08;
+      return [qRound(curve.at[0] + curve.normal[0] * half * sign), qRound(curve.at[1] + curve.normal[1] * half * sign)];
+    });
+    return pathThrough(side(-1).concat(side(1).reverse())) + " Z";
+  })();
+  var Q_RACHIS_LINE = "M-0.15 -24 C0.25 -46 2.25 -70 5.6 -90";
+  var Q_CALAMUS = "M-1.15 -10.4 C-1.2 -15 -1.05 -20 -0.82 -24.6 L0.82 -24.6 C1.05 -20 1.2 -15 1.15 -10.4 Z";
+  var Q_DOWN = "M0 -25.2 q-2.6 0.5 -4.6 -1.4 M0 -26.6 q-3 -0.2 -4.8 -3.2 M0.1 -28 q-2.4 -0.9 -3.6 -4.2 M0.2 -25.4 q2.8 0.7 4.8 -0.8 M0.2 -27 q3.3 -0.1 5.2 -2.9 M0.3 -28.6 q2.7 -0.8 4 -4";
+  var Q_FERRULE = "M-1.55 -9 L1.55 -9 L1.4 -11.2 L-1.4 -11.2 Z";
+  var Q_NIB_PATH = "M0 0.3 C-0.6 -2 -1.9 -5.4 -1.7 -9.1 L1.7 -9.1 C1.9 -5.4 0.6 -2 0 0.3 Z";
+  var Q_SLIT = "M0 -0.2 L0 -5.4";
+  var Q_SHOULDERS = "M-1.5 -7.6 Q0 -8.3 1.5 -7.6";
+  function buildQuill() {
+    const svg = [
+      '<svg viewBox="',
+      -Q_VIEW.left,
+      " ",
+      -Q_VIEW.top,
+      " ",
+      Q_VIEW.width,
+      " ",
+      Q_VIEW.height,
+      '">',
+      "<defs>",
+      '<linearGradient id="dn-quill-vane" x1="0" x2="1" y1="0" y2="0">',
+      '<stop offset="0" stop-color="var(--dn-quill-edge)"/>',
+      '<stop offset="0.3" stop-color="var(--dn-quill-sheen)"/>',
+      '<stop offset="0.5" stop-color="var(--dn-quill-body)"/>',
+      '<stop offset="1" stop-color="var(--dn-quill-edge)"/>',
+      "</linearGradient>",
+      '<linearGradient id="dn-quill-gilt" x1="0" x2="1" y1="0" y2="0">',
+      '<stop offset="0" stop-color="var(--dn-metal-lo)"/>',
+      '<stop offset="0.35" stop-color="var(--dn-metal-hi)"/>',
+      '<stop offset="0.6" stop-color="var(--dn-metal)"/>',
+      '<stop offset="1" stop-color="var(--dn-metal-lo)"/>',
+      "</linearGradient>",
+      '<linearGradient id="dn-quill-horn" x1="0" x2="1" y1="0" y2="0">',
+      '<stop offset="0" stop-color="#8c7651"/><stop offset="0.35" stop-color="#f3e6c6"/><stop offset="1" stop-color="#a58d61"/>',
+      "</linearGradient>",
+      '<clipPath id="dn-quill-clip"><path d="',
+      Q_VANE,
+      '"/></clipPath>',
+      "</defs>",
+      '<g class="dn-quill-sway"><g transform="rotate(',
+      Q_LEAN,
+      ')">',
+      '<path d="',
+      Q_DOWN,
+      '" class="dn-quill-down"/>',
+      '<path d="',
+      Q_VANE,
+      '" class="dn-quill-vane"/>',
+      '<g clip-path="url(#dn-quill-clip)">',
+      '<path d="',
+      Q_TRAILING_BARBS,
+      '" class="dn-quill-barbs"/>',
+      '<path d="',
+      Q_LEADING_BARBS,
+      '" class="dn-quill-barbs"/>',
+      '<rect class="dn-quill-shine" x="-8" y="-32" width="22" height="8"/>',
+      "</g>",
+      '<path d="',
+      Q_RACHIS_SHAPE,
+      '" class="dn-quill-rachis"/>',
+      '<path d="',
+      Q_RACHIS_LINE,
+      '" class="dn-quill-rachis-light"/>',
+      '<path d="',
+      Q_CALAMUS,
+      '" fill="url(#dn-quill-horn)"/>',
+      '<path d="',
+      Q_FERRULE,
+      '" fill="url(#dn-quill-gilt)"/>',
+      '<path d="',
+      Q_NIB_PATH,
+      '" fill="url(#dn-quill-gilt)"/>',
+      '<path d="',
+      Q_SHOULDERS,
+      '" class="dn-quill-engraving"/>',
+      '<path d="',
+      Q_SLIT,
+      '" class="dn-quill-engraving"/>',
+      '<circle cx="0" cy="-6" r="0.5" class="dn-quill-hole"/>',
+      '<circle class="dn-quill-glint" cx="0.4" cy="-1.8" r="0.9"/>',
+      "</g></g></svg>"
+    ].join("");
+    const element = document.createElement("div");
+    element.className = "dn-quill";
+    element.setAttribute("aria-hidden", "true");
+    element.innerHTML = svg;
+    return element;
   }
 
-  /** 换形态（墨迹 / 羽毛 / 原生）。要立刻生效，所以顺手把下一次测量标记为脏。 */
-  setMode(mode) {
-    if (mode !== 'ink' && mode !== 'quill' && mode !== 'none') return;
-    this.mode = mode;
-    this.hide();
-    this.dirty = true;
-    this.lastMeasure = 0;
-  }
-
-  /** 把宿主的原生光标藏起来之前先确认我们的墨块在场，否则用户会看不到光标。 */
-  claimNative() {
-    if (!this.editor || this.editor.__dnNativeClaimed) return;
-    this.editor.__dnNativeClaimed = true;
-    this.editor.style.setProperty('caret-color', 'transparent', 'important');
-  }
-
-  releaseNative() {
-    if (!this.editor || !this.editor.__dnNativeClaimed) return;
-    this.editor.style.removeProperty('caret-color');
-    this.editor.__dnNativeClaimed = false;
-  }
-
-  hide() {
-    if (!this.shown) return;
-    this.shown = false;
-    this.element.style.display = 'none';
-    if (this.quillEl) this.quillEl.style.display = 'none';
-    this.releaseNative();
-    this.editor = null;
-  }
-
-  measure(editor) {
+  // packages/dsh-nocturne/src/core/ink-caret.js
+  var measureCanvas = document.createElement("canvas").getContext("2d");
+  var BREATH_MS = 1700;
+  var REST_MS = 650;
+  var SINK = [
+    { opacity: 1, offset: 0 },
+    { opacity: 1, offset: 0.36, easing: "cubic-bezier(0.4, 0, 0.6, 1)" },
+    { opacity: 0.08, offset: 0.62 },
+    { opacity: 0.08, offset: 0.74, easing: "cubic-bezier(0.3, 0, 0.3, 1)" },
+    { opacity: 1, offset: 1 }
+  ];
+  var SPREAD = [
+    { opacity: 0, transform: "scale(1)", offset: 0 },
+    { opacity: 0, transform: "scale(1)", offset: 0.36, easing: "ease-out" },
+    { opacity: 0.3, transform: "scale(1.2)", offset: 0.52, easing: "ease-in" },
+    { opacity: 0, transform: "scale(1.55)", offset: 0.74 },
+    { opacity: 0, transform: "scale(1)", offset: 1 }
+  ];
+  var FRESH = [{ transform: "scale(1.12)" }, { transform: "scale(1)" }];
+  var FRESH_HALO = [{ opacity: 0.35, transform: "scale(1.3)" }, { opacity: 0, transform: "scale(1)" }];
+  function glyphAfter(editor, range) {
     try {
-      return this.measureInner(editor);
+      if (!editor || !range || !editor.contains(range.startContainer)) return "";
+      if (!editor.textContent) return "";
+      const rest = document.createRange();
+      rest.setStart(range.startContainer, range.startOffset);
+      rest.setEnd(editor, editor.childNodes.length);
+      const text = rest.toString();
+      return text ? text.charAt(0) : "";
     } catch (error) {
-      return null;
+      return "";
     }
   }
-
-  measureInner(editor) {
-    const style = getComputedStyle(editor);
-    const fontSize = parseFloat(style.fontSize) || 16;
-    if (editor.tagName === 'INPUT' || editor.tagName === 'TEXTAREA') {
-      const box = editor.getBoundingClientRect();
-      measureCanvas.font = style.fontStyle + ' ' + style.fontWeight + ' ' + fontSize + 'px ' + style.fontFamily;
-      const caret = editor.selectionStart == null ? String(editor.value || '').length : editor.selectionStart;
-      const textWidth = measureCanvas.measureText(String(editor.value || '').slice(0, caret)).width;
-      const lineHeight = parseFloat(style.lineHeight) || fontSize * 1.4;
-      const char = String(editor.value || '').charAt(caret);
+  function advanceOf(context, char) {
+    if (!char) return 0;
+    const width = context.measureText(char).width;
+    return Number.isFinite(width) ? width : 0;
+  }
+  function isEditor(element) {
+    if (!element || element.nodeType !== 1) return false;
+    const tag = element.tagName;
+    return tag === "INPUT" || tag === "TEXTAREA" || element.isContentEditable;
+  }
+  function activeEditor() {
+    const focused = document.activeElement;
+    if (isEditor(focused)) return focused;
+    const selection = window.getSelection();
+    let node = selection && selection.anchorNode;
+    while (node && node !== document.body) {
+      if (node.nodeType === 1 && node.isContentEditable) return node;
+      node = node.parentNode;
+    }
+    return null;
+  }
+  var InkCaret = class {
+    constructor() {
+      this.enabled = true;
+      this.reduce = window.matchMedia("(prefers-reduced-motion: reduce)");
+      this.element = document.createElement("div");
+      this.element.className = "dn-caret";
+      this.element.setAttribute("aria-hidden", "true");
+      this.halo = document.createElement("div");
+      this.halo.className = "dn-ink-halo";
+      this.blot = document.createElement("div");
+      this.blot.className = "dn-ink-blot";
+      this.glyph = document.createElement("span");
+      this.glyph.className = "dn-ink-glyph";
+      this.element.append(this.halo, this.blot, this.glyph);
+      this.breathing = [];
+      this.inComposition = false;
+      this.shown = false;
+      this.editor = null;
+      this.lastInkAt = 0;
+      this.dirty = true;
+      this.lastMeasure = 0;
+      this.point = { x: 0, y: 0, height: 18 };
+    }
+    /** 挂到 body 上。调用方负责把它插在两个纸层之前——它必须躺在纸光之下。 */
+    mount(before) {
+      this.quillEl = buildQuill();
+      this.mode = "ink";
+      if (before && before.parentNode) {
+        before.parentNode.insertBefore(this.quillEl, before);
+        before.parentNode.insertBefore(this.element, before);
+      } else {
+        document.body.appendChild(this.quillEl);
+        document.body.appendChild(this.element);
+      }
+      this.onSelection = () => {
+        this.dirty = true;
+        this.sync();
+      };
+      this.onKey = () => {
+        this.dirty = true;
+        this.ink();
+      };
+      this.onAny = () => {
+        this.dirty = true;
+      };
+      this.onScroll = () => {
+        this.dirty = true;
+      };
+      this.onCompositionStart = () => {
+        this.inComposition = true;
+        this.hide();
+      };
+      this.onCompositionEnd = () => {
+        this.inComposition = false;
+        this.sync();
+      };
+      this.onBlur = () => {
+        this.hide();
+      };
+      document.addEventListener("selectionchange", this.onSelection);
+      document.addEventListener("keydown", this.onKey, true);
+      document.addEventListener("input", this.onAny, true);
+      document.addEventListener("compositionstart", this.onCompositionStart, true);
+      document.addEventListener("compositionend", this.onCompositionEnd, true);
+      window.addEventListener("blur", this.onBlur);
+      window.addEventListener("resize", this.onAny);
+      window.addEventListener("scroll", this.onScroll, true);
+      this.breathe();
+    }
+    destroy() {
+      document.removeEventListener("selectionchange", this.onSelection);
+      document.removeEventListener("keydown", this.onKey, true);
+      document.removeEventListener("input", this.onAny, true);
+      document.removeEventListener("compositionstart", this.onCompositionStart, true);
+      document.removeEventListener("compositionend", this.onCompositionEnd, true);
+      window.removeEventListener("blur", this.onBlur);
+      window.removeEventListener("resize", this.onAny);
+      window.removeEventListener("scroll", this.onScroll, true);
+      this.releaseNative();
+      this.breathing.forEach((animation) => animation.cancel());
+      if (this.element.parentNode) this.element.remove();
+      if (this.quillEl && this.quillEl.parentNode) this.quillEl.remove();
+    }
+    /** 呼吸：停 REST_MS，再花 BREATH_MS 沉下去、涌回来，循环。 */
+    breathe() {
+      this.breathing.forEach((animation) => animation.cancel());
+      this.breathing = [];
+      if (this.reduce.matches) return;
+      const timing = { duration: BREATH_MS, delay: REST_MS, iterations: Infinity };
+      this.breathing = [
+        this.blot.animate(SINK, timing),
+        this.glyph.animate(SINK, timing),
+        this.halo.animate(SPREAD, timing)
+      ];
+    }
+    /** 一次击键：墨重新压进格子，呼吸从头开始。 */
+    ink() {
+      const now = performance.now();
+      if (now - this.lastInkAt < 24) return;
+      this.lastInkAt = now;
+      this.breathe();
+      if (this.reduce.matches || !this.shown) return;
+      this.blot.animate(FRESH, { duration: 160, easing: "ease-out" });
+      this.halo.animate(FRESH_HALO, { duration: 240, easing: "ease-out" });
+    }
+    /** 换形态（墨迹 / 羽毛 / 原生）。要立刻生效，所以顺手把下一次测量标记为脏。 */
+    setMode(mode) {
+      if (mode !== "ink" && mode !== "quill" && mode !== "none") return;
+      this.mode = mode;
+      this.hide();
+      this.dirty = true;
+      this.lastMeasure = 0;
+    }
+    /** 把宿主的原生光标藏起来之前先确认我们的墨块在场，否则用户会看不到光标。 */
+    claimNative() {
+      if (!this.editor || this.editor.__dnNativeClaimed) return;
+      this.editor.__dnNativeClaimed = true;
+      this.editor.style.setProperty("caret-color", "transparent", "important");
+    }
+    releaseNative() {
+      if (!this.editor || !this.editor.__dnNativeClaimed) return;
+      this.editor.style.removeProperty("caret-color");
+      this.editor.__dnNativeClaimed = false;
+    }
+    hide() {
+      if (!this.shown) return;
+      this.shown = false;
+      this.element.style.display = "none";
+      if (this.quillEl) this.quillEl.style.display = "none";
+      this.releaseNative();
+      this.editor = null;
+    }
+    measure(editor) {
+      try {
+        return this.measureInner(editor);
+      } catch (error) {
+        return null;
+      }
+    }
+    measureInner(editor) {
+      const style = getComputedStyle(editor);
+      const fontSize = parseFloat(style.fontSize) || 16;
+      if (editor.tagName === "INPUT" || editor.tagName === "TEXTAREA") {
+        const box = editor.getBoundingClientRect();
+        measureCanvas.font = style.fontStyle + " " + style.fontWeight + " " + fontSize + "px " + style.fontFamily;
+        const caret = editor.selectionStart == null ? String(editor.value || "").length : editor.selectionStart;
+        const textWidth = measureCanvas.measureText(String(editor.value || "").slice(0, caret)).width;
+        const lineHeight = parseFloat(style.lineHeight) || fontSize * 1.4;
+        const char2 = String(editor.value || "").charAt(caret);
+        return {
+          x: box.left + textWidth - (editor.scrollLeft || 0),
+          y: box.top + (box.height - lineHeight) / 2,
+          height: lineHeight,
+          fontSize,
+          char: char2,
+          cellWidth: char2 ? advanceOf(measureCanvas, char2) : 0,
+          focused: document.hasFocus()
+        };
+      }
+      const selection = window.getSelection();
+      if (!selection || !selection.rangeCount) return null;
+      const range = selection.getRangeAt(0);
+      if (!range.collapsed) return null;
+      const rects = range.getClientRects();
+      let rect = rects.length ? rects[rects.length - 1] : range.getBoundingClientRect();
+      if ((!rect || !rect.height && !rect.width) && selection.focusNode) {
+        const probe = document.createRange();
+        probe.selectNodeContents(selection.focusNode);
+        rect = probe.getBoundingClientRect();
+      }
+      if (!rect || !rect.height) return null;
+      const anchor = range.startContainer.nodeType === 1 ? range.startContainer : range.startContainer.parentElement;
+      const anchorStyle = anchor ? getComputedStyle(anchor) : style;
+      const anchorSize = parseFloat(anchorStyle.fontSize) || fontSize;
+      measureCanvas.font = anchorStyle.fontStyle + " " + anchorStyle.fontWeight + " " + anchorSize + "px " + anchorStyle.fontFamily;
+      const char = glyphAfter(editor, range);
       return {
-        x: box.left + textWidth - (editor.scrollLeft || 0),
-        y: box.top + (box.height - lineHeight) / 2,
-        height: lineHeight,
-        fontSize,
+        x: rect.left,
+        y: rect.top,
+        height: rect.height,
+        fontSize: anchorSize,
         char,
         cellWidth: char ? advanceOf(measureCanvas, char) : 0,
         focused: document.hasFocus()
       };
     }
-    const selection = window.getSelection();
-    if (!selection || !selection.rangeCount) return null;
-    const range = selection.getRangeAt(0);
-    if (!range.collapsed) return null;
-    const rects = range.getClientRects();
-    let rect = rects.length ? rects[rects.length - 1] : range.getBoundingClientRect();
-    if ((!rect || (!rect.height && !rect.width)) && selection.focusNode) {
-      const probe = document.createRange();
-      probe.selectNodeContents(selection.focusNode);
-      rect = probe.getBoundingClientRect();
+    /** 每帧调一次：位置、字、焦点。量不出来就老实藏起来，交给原生光标。 */
+    sync() {
+      try {
+        return this.syncInner();
+      } catch (error) {
+        this.hide();
+        return null;
+      }
     }
-    if (!rect || !rect.height) return null;
-    // 字宽要按光标所在那一层的字算，不能拿编辑区根节点的字号顶替：
-    // 引用块、代码块、标题里的字号都可能不同。
-    const anchor = range.startContainer.nodeType === 1 ? range.startContainer : range.startContainer.parentElement;
-    const anchorStyle = anchor ? getComputedStyle(anchor) : style;
-    const anchorSize = parseFloat(anchorStyle.fontSize) || fontSize;
-    measureCanvas.font = anchorStyle.fontStyle + ' ' + anchorStyle.fontWeight + ' ' + anchorSize + 'px ' + anchorStyle.fontFamily;
-    const char = glyphAfter(editor, range);
-    return {
-      x: rect.left,
-      y: rect.top,
-      height: rect.height,
-      fontSize: anchorSize,
-      char,
-      cellWidth: char ? advanceOf(measureCanvas, char) : 0,
-      focused: document.hasFocus()
-    };
-  }
-
-  /** 每帧调一次：位置、字、焦点。量不出来就老实藏起来，交给原生光标。 */
-  sync() {
-    try {
-      return this.syncInner();
-    } catch (error) {
-      this.hide();
-      return null;
+    syncInner() {
+      if (!this.enabled || this.inComposition) {
+        this.hide();
+        return null;
+      }
+      const editor = activeEditor();
+      if (!editor) {
+        this.hide();
+        return null;
+      }
+      if (editor !== this.editor) {
+        this.releaseNative();
+        this.editor = editor;
+        this.dirty = true;
+      }
+      const now = performance.now();
+      if (!this.dirty && now - this.lastMeasure < 250) return this.shown ? this.point : null;
+      this.dirty = false;
+      this.lastMeasure = now;
+      const info = this.measure(editor);
+      if (!info || this.inComposition) {
+        this.hide();
+        return null;
+      }
+      if (info.y + info.height < 0 || info.y > window.innerHeight) {
+        this.hide();
+        return null;
+      }
+      if (this.mode === "none") {
+        this.hide();
+        return null;
+      }
+      if (this.mode === "quill") this.paintQuill(info);
+      else this.paintInk(info);
+      if (!this.shown) {
+        this.shown = true;
+        this.breathe();
+      }
+      this.claimNative();
+      this.point = { x: info.x, y: info.y, height: info.height, cellWidth: info.cellWidth || info.fontSize * 0.52 };
+      return this.point;
     }
-  }
-
-  syncInner() {
-    if (!this.enabled) { this.hide(); return null; }
-    const editor = activeEditor();
-    if (!editor) { this.hide(); return null; }
-    if (editor !== this.editor) {
-      this.releaseNative();
-      this.editor = editor;
-      this.dirty = true;
+    /** 墨块：一格见方的洇墨，字用纸色反白。 */
+    paintInk(info) {
+      const width = Math.max(6, Math.min(info.fontSize * 1.25, info.cellWidth || info.fontSize * 0.52));
+      if (this.quillEl) this.quillEl.style.display = "none";
+      this.element.style.display = "block";
+      this.element.style.width = width.toFixed(2) + "px";
+      this.element.style.height = info.height.toFixed(2) + "px";
+      this.element.style.transform = "translate(" + info.x.toFixed(2) + "px, " + info.y.toFixed(2) + "px)";
+      this.element.style.setProperty("--dn-ink-size", info.fontSize.toFixed(1) + "px");
+      this.element.dataset.focused = String(info.focused);
+      this.element.dataset.appearance = paper().appearance;
+      if (this.glyph.textContent !== info.char) this.glyph.textContent = info.char;
     }
-    // 量一次选区要强制回流。每帧都量，长会话里就是每秒 60 次强制布局。
-    // 所以只在"确实动了"或每 250ms 兜底时才量。
-    const now = performance.now();
-    if (!this.dirty && now - this.lastMeasure < 250) return this.shown ? this.point : null;
-    this.dirty = false;
-    this.lastMeasure = now;
-    const info = this.measure(editor);
-    if (!info || this.inComposition) { this.hide(); return null; }
-    if (info.y + info.height < 0 || info.y > window.innerHeight) { this.hide(); return null; }
-    if (this.mode === 'none') { this.hide(); return null; }
-    if (this.mode === 'quill') this.paintQuill(info);
-    else this.paintInk(info);
-    if (!this.shown) {
-      this.shown = true;
-      this.breathe();
+    /** 羽毛笔：笔尖落在基线上，整支按行高缩放，向右倾 35°。 */
+    paintQuill(info) {
+      if (!this.quillEl) return;
+      const height = info.height * Q_LINES;
+      const scale = height / Q_VIEW.height;
+      const nibX = info.x + (info.cellWidth || info.fontSize * 0.5) * Q_NIB.x;
+      const nibY = info.y + info.height * Q_NIB.y;
+      const x = nibX - Q_VIEW.left * scale;
+      const y = nibY - Q_VIEW.top * scale;
+      this.element.style.display = "none";
+      this.quillEl.style.display = "block";
+      this.quillEl.style.width = (Q_VIEW.width * scale).toFixed(2) + "px";
+      this.quillEl.style.height = height.toFixed(2) + "px";
+      this.quillEl.style.transform = "translate(" + x.toFixed(2) + "px, " + y.toFixed(2) + "px)";
+      this.quillEl.dataset.focused = String(info.focused);
+      this.quillEl.dataset.appearance = paper().appearance;
     }
-    this.claimNative();
-    this.point = {x: info.x, y: info.y, height: info.height, cellWidth: info.cellWidth || info.fontSize * 0.52};
-    return this.point;
-  }
-
-  /** 墨块：一格见方的洇墨，字用纸色反白。 */
-  paintInk(info) {
-    const width = Math.max(6, Math.min(info.fontSize * 1.25, info.cellWidth || info.fontSize * 0.52));
-    if (this.quillEl) this.quillEl.style.display = 'none';
-    this.element.style.display = 'block';
-    this.element.style.width = width.toFixed(2) + 'px';
-    this.element.style.height = info.height.toFixed(2) + 'px';
-    this.element.style.transform = 'translate(' + info.x.toFixed(2) + 'px, ' + info.y.toFixed(2) + 'px)';
-    this.element.style.setProperty('--dn-ink-size', info.fontSize.toFixed(1) + 'px');
-    this.element.dataset.focused = String(info.focused);
-    this.element.dataset.appearance = paper().appearance;
-    if (this.glyph.textContent !== info.char) this.glyph.textContent = info.char;
-  }
-
-  /** 羽毛笔：笔尖落在基线上，整支按行高缩放，向右倾 35°。 */
-  paintQuill(info) {
-    if (!this.quillEl) return;
-    const height = info.height * Q_LINES;
-    const scale = height / Q_VIEW.height;
-    const nibX = info.x + (info.cellWidth || info.fontSize * 0.5) * Q_NIB.x;
-    const nibY = info.y + info.height * Q_NIB.y;
-    const x = nibX - Q_VIEW.left * scale;
-    const y = nibY - Q_VIEW.top * scale;
-    this.element.style.display = 'none';
-    this.quillEl.style.display = 'block';
-    this.quillEl.style.width = (Q_VIEW.width * scale).toFixed(2) + 'px';
-    this.quillEl.style.height = height.toFixed(2) + 'px';
-    this.quillEl.style.transform = 'translate(' + x.toFixed(2) + 'px, ' + y.toFixed(2) + 'px)';
-    this.quillEl.dataset.focused = String(info.focused);
-    this.quillEl.dataset.appearance = paper().appearance;
-  }
-}
-
-const measureCanvas = document.createElement('canvas').getContext('2d');
-
-
-/* ═══════════════════════════════════════════════════════════════════════════
-   5.6 · 羽毛笔光标：lib/nocturne/components/quill-cursor.tsx 的移植
-   笔尖落在插入点、整支向右倾 35°：鎏金笔尖装在笔箍里，裸露的角质笔杆，
-   两侧羽枝一窄一宽、带两道分叉，笔脊上有一道光跑过。几何全是算出来的，没有位图。
-   ═══════════════════════════════════════════════════════════════════════ */
-const Q_VIEW = {left: 4, top: 74, width: 64, height: 78};
-const Q_LINES = 1.15;
-const Q_NIB = {x: 0.15, y: 0.84};
-const Q_LEAN = 35;
-
-const qRound = (value) => Number(value.toFixed(2));
-
-function curveThrough(points) {
-  let d = '';
-  for (let i = 0; i < points.length - 1; i++) {
-    const p0 = points[Math.max(0, i - 1)];
-    const p1 = points[i];
-    const p2 = points[i + 1];
-    const p3 = points[Math.min(points.length - 1, i + 2)];
-    const c1 = [qRound(p1[0] + (p2[0] - p0[0]) / 6), qRound(p1[1] + (p2[1] - p0[1]) / 6)];
-    const c2 = [qRound(p2[0] - (p3[0] - p1[0]) / 6), qRound(p2[1] - (p3[1] - p1[1]) / 6)];
-    d += ' C' + c1[0] + ' ' + c1[1] + ' ' + c2[0] + ' ' + c2[1] + ' ' + p2[0] + ' ' + p2[1];
-  }
-  return d;
-}
-const pathThrough = (points) => 'M' + points[0][0] + ' ' + points[0][1] + curveThrough(points);
-
-const Q_RACHIS = [[0, -24], [0.4, -46], [2.4, -70], [5.6, -90]];
-
-function qAlong(t) {
-  const p0 = Q_RACHIS[0], p1 = Q_RACHIS[1], p2 = Q_RACHIS[2], p3 = Q_RACHIS[3];
-  const u = 1 - t;
-  const weights = [u * u * u, 3 * u * u * t, 3 * u * t * t, t * t * t];
-  const at = [0, 0];
-  Q_RACHIS.forEach((p, i) => { at[0] += weights[i] * p[0]; at[1] += weights[i] * p[1]; });
-  const dx = 3 * u * u * (p1[0] - p0[0]) + 6 * u * t * (p2[0] - p1[0]) + 3 * t * t * (p3[0] - p2[0]);
-  const dy = 3 * u * u * (p1[1] - p0[1]) + 6 * u * t * (p2[1] - p1[1]) + 3 * t * t * (p3[1] - p2[1]);
-  const length = Math.hypot(dx, dy) || 1;
-  const tangent = [dx / length, dy / length];
-  return {at, tangent, normal: [-tangent[1], tangent[0]]};
-}
-
-const Q_VANE_FROM = 0.05;
-const qGauss = (s, at, width) => Math.exp(-Math.pow((s - at) / width, 2));
-const qTrailing = (s) => 8.4 * Math.pow(Math.sin(Math.PI * Math.pow(s, 0.75)), 0.85) * (1 - 0.3 * qGauss(s, 0.42, 0.018) - 0.24 * qGauss(s, 0.67, 0.016));
-const qLeading = (s) => 3.4 * Math.pow(Math.sin(Math.PI * Math.pow(s, 0.65)), 0.9) * (1 - 0.32 * qGauss(s, 0.56, 0.02));
-
-function qEdge(s, side, reach) {
-  const t = Q_VANE_FROM + (1 - Q_VANE_FROM) * s;
-  const curve = qAlong(t);
-  const width = (side > 0 ? qTrailing(s) : qLeading(s)) * (reach == null ? 1 : reach);
-  return [
-    qRound(curve.at[0] + curve.normal[0] * width * side + curve.tangent[0] * width * 0.38),
-    qRound(curve.at[1] + curve.normal[1] * width * side + curve.tangent[1] * width * 0.38)
-  ];
-}
-
-const Q_SAMPLES = Array.from({length: 61}, (_, i) => i / 60);
-const Q_VANE = (() => {
-  const leading = Q_SAMPLES.map((s) => qEdge(s, -1));
-  const trailing = Q_SAMPLES.slice().reverse().map((s) => qEdge(s, 1));
-  return pathThrough(leading.concat(trailing.slice(1))) + ' Z';
-})();
-
-function qBarbs(side, count) {
-  let d = '';
-  for (let i = 0; i < count; i++) {
-    const s = 0.04 + (i / (count - 1)) * 0.9;
-    const curve = qAlong(Q_VANE_FROM + (1 - Q_VANE_FROM) * s);
-    const end = qEdge(Math.min(1, s + 0.05), side, 0.94);
-    const width = side > 0 ? qTrailing(s) : qLeading(s);
-    const control = [
-      qRound(curve.at[0] + curve.normal[0] * width * side * 0.55),
-      qRound(curve.at[1] + curve.normal[1] * width * side * 0.55)
-    ];
-    d += 'M' + qRound(curve.at[0]) + ' ' + qRound(curve.at[1]) + ' Q' + control[0] + ' ' + control[1] + ' ' + end[0] + ' ' + end[1] + ' ';
-  }
-  return d.trim();
-}
-
-const Q_TRAILING_BARBS = qBarbs(1, 30);
-const Q_LEADING_BARBS = qBarbs(-1, 22);
-
-const Q_RACHIS_SHAPE = (() => {
-  const steps = Array.from({length: 25}, (_, i) => (i / 24) * 0.98);
-  const side = (sign) => steps.map((t) => {
-    const curve = qAlong(t);
-    const half = 0.62 * (1 - t) + 0.08;
-    return [qRound(curve.at[0] + curve.normal[0] * half * sign), qRound(curve.at[1] + curve.normal[1] * half * sign)];
-  });
-  return pathThrough(side(-1).concat(side(1).reverse())) + ' Z';
-})();
-
-const Q_RACHIS_LINE = 'M-0.15 -24 C0.25 -46 2.25 -70 5.6 -90';
-const Q_CALAMUS = 'M-1.15 -10.4 C-1.2 -15 -1.05 -20 -0.82 -24.6 L0.82 -24.6 C1.05 -20 1.2 -15 1.15 -10.4 Z';
-const Q_DOWN = 'M0 -25.2 q-2.6 0.5 -4.6 -1.4 M0 -26.6 q-3 -0.2 -4.8 -3.2 M0.1 -28 q-2.4 -0.9 -3.6 -4.2 '
-  + 'M0.2 -25.4 q2.8 0.7 4.8 -0.8 M0.2 -27 q3.3 -0.1 5.2 -2.9 M0.3 -28.6 q2.7 -0.8 4 -4';
-const Q_FERRULE = 'M-1.55 -9 L1.55 -9 L1.4 -11.2 L-1.4 -11.2 Z';
-const Q_NIB_PATH = 'M0 0.3 C-0.6 -2 -1.9 -5.4 -1.7 -9.1 L1.7 -9.1 C1.9 -5.4 0.6 -2 0 0.3 Z';
-const Q_SLIT = 'M0 -0.2 L0 -5.4';
-const Q_SHOULDERS = 'M-1.5 -7.6 Q0 -8.3 1.5 -7.6';
-
-/** 笔的 SVG。整支先在原点画好，再整体右倾 35°。 */
-function buildQuill() {
-  const svg = [
-    '<svg viewBox="', -Q_VIEW.left, ' ', -Q_VIEW.top, ' ', Q_VIEW.width, ' ', Q_VIEW.height, '">',
-    '<defs>',
-    '<linearGradient id="dn-quill-vane" x1="0" x2="1" y1="0" y2="0">',
-    '<stop offset="0" stop-color="var(--dn-quill-edge)"/>',
-    '<stop offset="0.3" stop-color="var(--dn-quill-sheen)"/>',
-    '<stop offset="0.5" stop-color="var(--dn-quill-body)"/>',
-    '<stop offset="1" stop-color="var(--dn-quill-edge)"/>',
-    '</linearGradient>',
-    '<linearGradient id="dn-quill-gilt" x1="0" x2="1" y1="0" y2="0">',
-    '<stop offset="0" stop-color="var(--dn-metal-lo)"/>',
-    '<stop offset="0.35" stop-color="var(--dn-metal-hi)"/>',
-    '<stop offset="0.6" stop-color="var(--dn-metal)"/>',
-    '<stop offset="1" stop-color="var(--dn-metal-lo)"/>',
-    '</linearGradient>',
-    '<linearGradient id="dn-quill-horn" x1="0" x2="1" y1="0" y2="0">',
-    '<stop offset="0" stop-color="#8c7651"/><stop offset="0.35" stop-color="#f3e6c6"/><stop offset="1" stop-color="#a58d61"/>',
-    '</linearGradient>',
-    '<clipPath id="dn-quill-clip"><path d="', Q_VANE, '"/></clipPath>',
-    '</defs>',
-    '<g class="dn-quill-sway"><g transform="rotate(', Q_LEAN, ')">',
-    '<path d="', Q_DOWN, '" class="dn-quill-down"/>',
-    '<path d="', Q_VANE, '" class="dn-quill-vane"/>',
-    '<g clip-path="url(#dn-quill-clip)">',
-    '<path d="', Q_TRAILING_BARBS, '" class="dn-quill-barbs"/>',
-    '<path d="', Q_LEADING_BARBS, '" class="dn-quill-barbs"/>',
-    '<rect class="dn-quill-shine" x="-8" y="-32" width="22" height="8"/>',
-    '</g>',
-    '<path d="', Q_RACHIS_SHAPE, '" class="dn-quill-rachis"/>',
-    '<path d="', Q_RACHIS_LINE, '" class="dn-quill-rachis-light"/>',
-    '<path d="', Q_CALAMUS, '" fill="url(#dn-quill-horn)"/>',
-    '<path d="', Q_FERRULE, '" fill="url(#dn-quill-gilt)"/>',
-    '<path d="', Q_NIB_PATH, '" fill="url(#dn-quill-gilt)"/>',
-    '<path d="', Q_SHOULDERS, '" class="dn-quill-engraving"/>',
-    '<path d="', Q_SLIT, '" class="dn-quill-engraving"/>',
-    '<circle cx="0" cy="-6" r="0.5" class="dn-quill-hole"/>',
-    '<circle class="dn-quill-glint" cx="0.4" cy="-1.8" r="0.9"/>',
-    '</g></g></svg>'
-  ].join('');
-  const element = document.createElement('div');
-  element.className = 'dn-quill';
-  element.setAttribute('aria-hidden', 'true');
-  element.innerHTML = svg;
-  return element;
-}
-
-/* ═══════════════════════════════════════════════════════════════════════════
-   5.7 · 缮写室 Studio：纸、房间、灯、器物
-   形状照上游 Studio（深色玻璃面板 + 斜体标题 + 描金细边），控件是原生的，
-   所以键盘、读屏、缩放都按系统来。
-   ═══════════════════════════════════════════════════════════════════════ */
-const STUDIO_THEMES = [
-  {id: 'paper-and-ink', name: '纸与墨'},
-  {id: 'midnight-study', name: '子夜书斋'},
-  {id: 'moonlit-poetry', name: '月下诗稿'}
-];
-const STUDIO_PAPERS = [
-  {id: 'onionskin', name: '葱皮'},
-  {id: 'cotton', name: '棉浆'},
-  {id: 'laid', name: '帘纹'},
-  {id: 'linen', name: '亚麻'},
-  {id: 'parchment', name: '羊皮'},
-  {id: 'night', name: '夜纸'}
-];
-const STUDIO_COEXIST = [
-  {id: 'auto', name: '自动'},
-  {id: 'material', name: '只叠材质'},
-  {id: 'full', name: '接管配色'}
-];
-const STUDIO_CURSORS = [
-  {id: 'ink', name: '墨迹'},
-  {id: 'quill', name: '羽毛'},
-  {id: 'none', name: '原生'}
-];
-const STUDIO_SCROLL = [
-  {id: 'clip', name: '纸夹'},
-  {id: 'bar', name: '细杆'},
-  {id: 'native', name: '原生'}
-];
-/** 四种金属：高光 → 本体 → 暗边，直接做成色片给按钮用。 */
-const STUDIO_FINISHES = [
-  {id: 'silver', name: '银', swatch: 'linear-gradient(140deg,#ffffff,#b9bfc7 55%,#4d535b)'},
-  {id: 'brass', name: '黄铜', swatch: 'linear-gradient(140deg,#fff1c6,#c19a52 55%,#4f3712)'},
-  {id: 'gold', name: '金', swatch: 'linear-gradient(140deg,#fff6cf,#d9ad4c 55%,#6a4a0c)'},
-  {id: 'black', name: '黑', swatch: 'linear-gradient(140deg,#9a9a9e,#2e2e31 55%,#060607)'}
-];
-const STUDIO_SLIDERS = [
-  {key: 'intensity', label: '灯强', min: 0, max: 2, step: 0.05, format: (v) => Math.round(v * 100) + '%'},
-  {key: 'spread', label: '光锥', min: 20, max: 160, step: 1, format: (v) => Math.round(v) + '°'},
-  {key: 'softness', label: '柔边', min: 0, max: 1, step: 0.01, format: (v) => Math.round(v * 100) + '%'},
-  {key: 'grain', label: '胶片颗粒', min: 0, max: 1, step: 0.01, format: (v) => Math.round(v * 100) + '%'},
-  {key: 'particles', label: '光里尘埃', min: 0, max: 1, step: 0.01, format: (v) => Math.round(v * 100) + '%'},
-  {key: 'texture', label: '纸纹深度', min: 0, max: 1.6, step: 0.02, format: (v) => Math.round(v * 100) + '%'}
-];
-
-function buildStudio(options) {
-  const onChange = options.onChange;
-  const state = options.state();
-
-  const root = document.createElement('div');
-  root.className = 'dn-studio';
-  root.dataset.open = 'false';
-  root.setAttribute('role', 'dialog');
-  root.setAttribute('aria-label', '缮写室');
-
-  const part = [];
-  part.push('<button class="close" type="button" aria-label="关闭">×</button>');
-  part.push('<div class="eyebrow">Nocturne Studio</div>');
-  part.push('<h2>灯、纸与墨</h2>');
-  part.push('<div class="group"><h3>房间</h3><div class="grid" data-group="theme"></div></div>');
-  part.push('<div class="group"><h3>纸</h3><div class="grid" data-group="paper"></div></div>');
-  part.push('<div class="group"><div class="switch"><span class="label">台灯</span>'
-    + '<button class="toggle" type="button" role="switch" aria-checked="true" aria-label="台灯"></button></div></div>');
-  part.push('<div class="group" data-group="sliders"></div>');
-  part.push('<div class="group"><h3>光标</h3><div class="grid" data-group="cursor"></div></div>');
-  part.push('<div class="group"><h3>滚条</h3><div class="grid" data-group="scroll"></div>'
-    + '<div class="grid" data-group="finish" hidden></div>'
-    + '<div data-group="bar-slider" hidden></div>'
-    + '<p class="note" data-group="scroll-hint">纸夹是 Gem 夹，夹在纸的右缘：外圈在纸前、'
-    + '内舌压在纸上、弯头探出纸外。拖动它就能卷动正文。</p></div>');
-  part.push('<div class="group"><h3>共存</h3><div class="grid" data-group="coexist"></div>'
-    + '<p class="note" data-group="coexist-hint" hidden></p></div>');
-  part.push('<div class="group"><button class="reset" type="button">回到标定值</button></div>');
-  part.push('<div class="group"><p class="note">纸、灯、墨的色值与纸面参数取自 Typewriter-Nocturne（MIT）。'
-    + '这里的每一项都直接改渲染参数，改完即见。</p></div>');
-  root.innerHTML = part.join('');
-
-  const groupOf = (name) => root.querySelector('[data-group="' + name + '"]');
-
-  function choiceButton(id, label, swatch) {
-    const button = document.createElement('button');
-    button.type = 'button';
-    button.className = 'choice';
-    button.dataset.value = id;
-    button.setAttribute('aria-pressed', 'false');
-    if (swatch) {
-      const chip = document.createElement('span');
-      chip.className = 'swatch';
-      chip.style.background = swatch;
-      button.appendChild(chip);
-    }
-    const text = document.createElement('span');
-    text.textContent = label;
-    button.appendChild(text);
-    return button;
-  }
-
-  for (const item of STUDIO_THEMES) {
-    const theme = THEMES[item.id];
-    const swatch = 'linear-gradient(140deg, ' + theme.palette.room + ' 0 52%, ' + theme.light.color + ' 52% 100%)';
-    groupOf('theme').appendChild(choiceButton(item.id, item.name, swatch));
-  }
-  for (const item of STUDIO_PAPERS) {
-    groupOf('paper').appendChild(choiceButton(item.id, item.name, PAPERS[item.id].paper));
-  }
-  for (const item of STUDIO_CURSORS) {
-    groupOf('cursor').appendChild(choiceButton(item.id, item.name, null));
-  }
-  for (const item of STUDIO_COEXIST) {
-    groupOf('coexist').appendChild(choiceButton(item.id, item.name, null));
-  }
-  for (const item of STUDIO_SCROLL) {
-    groupOf('scroll').appendChild(choiceButton(item.id, item.name, null));
-  }
-  for (const item of STUDIO_FINISHES) {
-    groupOf('finish').appendChild(choiceButton(item.id, item.name, item.swatch));
-  }
-
-  const reads = [];
-
-  /** 组内的小滑杆：值落在嵌套对象里，所以读和写都走取值函数。 */
-  function miniSlider(host, spec) {
-    const wrap = document.createElement('div');
-    wrap.className = 'slider';
-    const head = document.createElement('div');
-    head.className = 'head';
-    const label = document.createElement('span');
-    label.className = 'label';
-    label.textContent = spec.label;
-    const value = document.createElement('span');
-    value.className = 'value';
-    head.append(label, value);
-    const input = document.createElement('input');
-    input.type = 'range';
-    input.min = String(spec.min);
-    input.max = String(spec.max);
-    input.step = String(spec.step);
-    input.setAttribute('aria-label', spec.label);
-    input.addEventListener('input', () => {
-      const next = Number(input.value);
-      value.textContent = spec.format(next);
-      onChange(spec.key, next);
-    });
-    wrap.append(head, input);
-    host.appendChild(wrap);
-    reads.push(() => {
-      const current = spec.value();
-      input.value = String(current);
-      value.textContent = spec.format(current);
-    });
-  }
-
-  miniSlider(groupOf('bar-slider'), {
-    key: 'scrollBarWidth', label: '杆宽', min: 3, max: 14, step: 1,
-    format: (v) => Math.round(v) + 'px', value: () => state.scrollbar.barWidth
-  });
-  miniSlider(groupOf('bar-slider'), {
-    key: 'scrollBarOpacity', label: '杆不透明度', min: 0.1, max: 1, step: 0.05,
-    format: (v) => Math.round(v * 100) + '%', value: () => state.scrollbar.barOpacity
-  });
-
-  for (const slider of STUDIO_SLIDERS) {
-    const wrap = document.createElement('div');
-    wrap.className = 'slider';
-    const head = document.createElement('div');
-    head.className = 'head';
-    const label = document.createElement('span');
-    label.className = 'label';
-    label.textContent = slider.label;
-    const value = document.createElement('span');
-    value.className = 'value';
-    head.append(label, value);
-    const input = document.createElement('input');
-    input.type = 'range';
-    input.min = String(slider.min);
-    input.max = String(slider.max);
-    input.step = String(slider.step);
-    input.setAttribute('aria-label', slider.label);
-    input.addEventListener('input', () => {
-      const next = Number(input.value);
-      value.textContent = slider.format(next);
-      onChange(slider.key, next);
-    });
-    wrap.append(head, input);
-    groupOf('sliders').appendChild(wrap);
-    reads.push(() => {
-      input.value = String(state[slider.key]);
-      value.textContent = slider.format(state[slider.key]);
-    });
-  }
-
-  const toggle = root.querySelector('.toggle');
-  toggle.addEventListener('click', () => {
-    const next = toggle.getAttribute('aria-checked') !== 'true';
-    toggle.setAttribute('aria-checked', String(next));
-    onChange('lamp', next);
-  });
-
-  root.querySelector('.reset').addEventListener('click', () => {
-    onChange('preset', 'calibrated');
-    sync();
-  });
-
-  root.querySelector('.close').addEventListener('click', () => {
-    root.dataset.open = 'false';
-    handle.setAttribute('aria-expanded', 'false');
-  });
-
-  // 组名不等于设置键：光标那组叫 cursor，设置里叫 cursorMode。
-  const KEY_OF = {
-    theme: 'theme', paper: 'paper', cursor: 'cursor', coexist: 'coexist',
-    scroll: 'scrollStyle', finish: 'scrollFinish'
   };
-  root.addEventListener('click', (event) => {
-    const button = event.target.closest('button.choice');
-    if (!button) return;
-    const group = button.parentElement.dataset.group;
-    onChange(KEY_OF[group] || group, button.dataset.value);
-    sync();
-  });
 
-  const handle = document.createElement('button');
-  handle.type = 'button';
-  handle.className = 'dn-handle';
-  handle.setAttribute('aria-expanded', 'false');
-  handle.innerHTML = '<svg viewBox="0 0 16 16"><path d="M3 4h10M3 8h10M3 12h6"/></svg><span>缮写室</span>';
-  handle.addEventListener('click', () => {
-    const open = root.dataset.open !== 'true';
-    root.dataset.open = String(open);
-    handle.setAttribute('aria-expanded', String(open));
-  });
-
-  function sync() {
-    const mark = (group, active) => {
-      for (const button of root.querySelectorAll('[data-group="' + group + '"] button.choice')) {
-        button.setAttribute('aria-pressed', String(button.dataset.value === active));
+  // packages/dsh-nocturne/src/core/studio.js
+  var STUDIO_THEMES = [
+    { id: "paper-and-ink", name: "纸与墨" },
+    { id: "midnight-study", name: "子夜书斋" },
+    { id: "moonlit-poetry", name: "月下诗稿" }
+  ];
+  var STUDIO_PAPERS = [
+    { id: "onionskin", name: "葱皮" },
+    { id: "cotton", name: "棉浆" },
+    { id: "laid", name: "帘纹" },
+    { id: "linen", name: "亚麻" },
+    { id: "parchment", name: "羊皮" },
+    { id: "night", name: "夜纸" }
+  ];
+  var STUDIO_COEXIST = [
+    { id: "auto", name: "自动" },
+    { id: "material", name: "只叠材质" },
+    { id: "full", name: "接管配色" }
+  ];
+  var STUDIO_CURSORS = [
+    { id: "ink", name: "墨迹" },
+    { id: "quill", name: "羽毛" },
+    { id: "none", name: "原生" }
+  ];
+  var STUDIO_SCROLL = [
+    { id: "clip", name: "纸夹" },
+    { id: "bar", name: "细杆" },
+    { id: "native", name: "原生" }
+  ];
+  var STUDIO_FINISHES = [
+    { id: "silver", name: "银", swatch: "linear-gradient(140deg,#ffffff,#b9bfc7 55%,#4d535b)" },
+    { id: "brass", name: "黄铜", swatch: "linear-gradient(140deg,#fff1c6,#c19a52 55%,#4f3712)" },
+    { id: "gold", name: "金", swatch: "linear-gradient(140deg,#fff6cf,#d9ad4c 55%,#6a4a0c)" },
+    { id: "black", name: "黑", swatch: "linear-gradient(140deg,#9a9a9e,#2e2e31 55%,#060607)" }
+  ];
+  var STUDIO_SLIDERS = [
+    { key: "intensity", label: "灯强", min: 0, max: 2, step: 0.05, format: (v) => Math.round(v * 100) + "%" },
+    { key: "spread", label: "光锥", min: 20, max: 160, step: 1, format: (v) => Math.round(v) + "°" },
+    { key: "softness", label: "柔边", min: 0, max: 1, step: 0.01, format: (v) => Math.round(v * 100) + "%" },
+    { key: "grain", label: "胶片颗粒", min: 0, max: 1, step: 0.01, format: (v) => Math.round(v * 100) + "%" },
+    { key: "particles", label: "光里尘埃", min: 0, max: 1, step: 0.01, format: (v) => Math.round(v * 100) + "%" },
+    { key: "texture", label: "纸纹深度", min: 0, max: 1.6, step: 0.02, format: (v) => Math.round(v * 100) + "%" }
+  ];
+  function buildStudio(options) {
+    const onChange = options.onChange;
+    const state = options.state();
+    const root = document.createElement("div");
+    root.className = "dn-studio";
+    root.dataset.open = "false";
+    root.setAttribute("role", "dialog");
+    root.setAttribute("aria-label", "缮写室");
+    const part = [];
+    part.push('<button class="close" type="button" aria-label="关闭">×</button>');
+    part.push('<div class="eyebrow">Nocturne Studio</div>');
+    part.push("<h2>灯、纸与墨</h2>");
+    part.push('<div class="group"><h3>房间</h3><div class="grid" data-group="theme"></div></div>');
+    part.push('<div class="group"><h3>纸</h3><div class="grid" data-group="paper"></div></div>');
+    part.push('<div class="group"><div class="switch"><span class="label">台灯</span><button class="toggle" type="button" role="switch" aria-checked="true" aria-label="台灯"></button></div></div>');
+    part.push('<div class="group" data-group="sliders"></div>');
+    part.push('<div class="group"><h3>光标</h3><div class="grid" data-group="cursor"></div></div>');
+    part.push('<div class="group"><h3>滚条</h3><div class="grid" data-group="scroll"></div><div class="grid" data-group="finish" hidden></div><div data-group="bar-slider" hidden></div><p class="note" data-group="scroll-hint">纸夹是 Gem 夹，夹在纸的右缘：外圈在纸前、内舌压在纸上、弯头探出纸外。拖动它就能卷动正文。</p></div>');
+    part.push('<div class="group"><h3>共存</h3><div class="grid" data-group="coexist"></div><p class="note" data-group="coexist-hint" hidden></p></div>');
+    part.push('<div class="group"><button class="reset" type="button">回到标定值</button></div>');
+    part.push('<div class="group"><p class="note">纸、灯、墨的色值与纸面参数取自 Typewriter-Nocturne（MIT）。这里的每一项都直接改渲染参数，改完即见。</p></div>');
+    root.innerHTML = part.join("");
+    const groupOf = (name) => root.querySelector('[data-group="' + name + '"]');
+    function choiceButton(id, label, swatch) {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "choice";
+      button.dataset.value = id;
+      button.setAttribute("aria-pressed", "false");
+      if (swatch) {
+        const chip = document.createElement("span");
+        chip.className = "swatch";
+        chip.style.background = swatch;
+        button.appendChild(chip);
       }
+      const text = document.createElement("span");
+      text.textContent = label;
+      button.appendChild(text);
+      return button;
+    }
+    for (const item of STUDIO_THEMES) {
+      const theme2 = THEMES[item.id];
+      const swatch = "linear-gradient(140deg, " + theme2.palette.room + " 0 52%, " + theme2.light.color + " 52% 100%)";
+      groupOf("theme").appendChild(choiceButton(item.id, item.name, swatch));
+    }
+    for (const item of STUDIO_PAPERS) {
+      groupOf("paper").appendChild(choiceButton(item.id, item.name, PAPERS[item.id].paper));
+    }
+    for (const item of STUDIO_CURSORS) {
+      groupOf("cursor").appendChild(choiceButton(item.id, item.name, null));
+    }
+    for (const item of STUDIO_COEXIST) {
+      groupOf("coexist").appendChild(choiceButton(item.id, item.name, null));
+    }
+    for (const item of STUDIO_SCROLL) {
+      groupOf("scroll").appendChild(choiceButton(item.id, item.name, null));
+    }
+    for (const item of STUDIO_FINISHES) {
+      groupOf("finish").appendChild(choiceButton(item.id, item.name, item.swatch));
+    }
+    const reads = [];
+    function miniSlider(host, spec) {
+      const wrap = document.createElement("div");
+      wrap.className = "slider";
+      const head = document.createElement("div");
+      head.className = "head";
+      const label = document.createElement("span");
+      label.className = "label";
+      label.textContent = spec.label;
+      const value = document.createElement("span");
+      value.className = "value";
+      head.append(label, value);
+      const input = document.createElement("input");
+      input.type = "range";
+      input.min = String(spec.min);
+      input.max = String(spec.max);
+      input.step = String(spec.step);
+      input.setAttribute("aria-label", spec.label);
+      input.addEventListener("input", () => {
+        const next = Number(input.value);
+        value.textContent = spec.format(next);
+        onChange(spec.key, next);
+      });
+      wrap.append(head, input);
+      host.appendChild(wrap);
+      reads.push(() => {
+        const current = spec.value();
+        input.value = String(current);
+        value.textContent = spec.format(current);
+      });
+    }
+    miniSlider(groupOf("bar-slider"), {
+      key: "scrollBarWidth",
+      label: "杆宽",
+      min: 3,
+      max: 14,
+      step: 1,
+      format: (v) => Math.round(v) + "px",
+      value: () => state.scrollbar.barWidth
+    });
+    miniSlider(groupOf("bar-slider"), {
+      key: "scrollBarOpacity",
+      label: "杆不透明度",
+      min: 0.1,
+      max: 1,
+      step: 0.05,
+      format: (v) => Math.round(v * 100) + "%",
+      value: () => state.scrollbar.barOpacity
+    });
+    for (const slider of STUDIO_SLIDERS) {
+      const wrap = document.createElement("div");
+      wrap.className = "slider";
+      const head = document.createElement("div");
+      head.className = "head";
+      const label = document.createElement("span");
+      label.className = "label";
+      label.textContent = slider.label;
+      const value = document.createElement("span");
+      value.className = "value";
+      head.append(label, value);
+      const input = document.createElement("input");
+      input.type = "range";
+      input.min = String(slider.min);
+      input.max = String(slider.max);
+      input.step = String(slider.step);
+      input.setAttribute("aria-label", slider.label);
+      input.addEventListener("input", () => {
+        const next = Number(input.value);
+        value.textContent = slider.format(next);
+        onChange(slider.key, next);
+      });
+      wrap.append(head, input);
+      groupOf("sliders").appendChild(wrap);
+      reads.push(() => {
+        input.value = String(state[slider.key]);
+        value.textContent = slider.format(state[slider.key]);
+      });
+    }
+    const toggle = root.querySelector(".toggle");
+    toggle.addEventListener("click", () => {
+      const next = toggle.getAttribute("aria-checked") !== "true";
+      toggle.setAttribute("aria-checked", String(next));
+      onChange("lamp", next);
+    });
+    root.querySelector(".reset").addEventListener("click", () => {
+      onChange("preset", "calibrated");
+      sync();
+    });
+    root.querySelector(".close").addEventListener("click", () => {
+      root.dataset.open = "false";
+      handle.setAttribute("aria-expanded", "false");
+    });
+    const KEY_OF = {
+      theme: "theme",
+      paper: "paper",
+      cursor: "cursor",
+      coexist: "coexist",
+      scroll: "scrollStyle",
+      finish: "scrollFinish"
     };
-    mark('theme', state.theme);
-    mark('paper', state.paper);
-    mark('cursor', state.cursorMode);
-    mark('coexist', state.coexist);
-    mark('scroll', state.scrollbar.style);
-    mark('finish', state.scrollbar.finish);
-    // 金属只在"纸夹"下有意义，杆宽只在"细杆"下有意义——没有的项不显示。
-    groupOf('finish').hidden = state.scrollbar.style !== 'clip';
-    groupOf('bar-slider').hidden = state.scrollbar.style !== 'bar';
-    // 探测到别的皮肤在改同一批 token 时，明说一句，并给出一键切换。
-    const hint = root.querySelector('[data-group="coexist-hint"]');
-    const foreign = typeof options.foreign === 'function' ? options.foreign() : null;
-    const resolved = typeof options.resolvedCoexist === 'function'
-      ? options.resolvedCoexist()
-      : (state.coexist === 'auto' ? (foreign ? 'material' : 'full') : state.coexist);
-    if (hint) {
-      if (foreign) {
-        hint.hidden = false;
-        const why = state.coexist === 'auto' ? '已自动让位：' : '';
-        hint.textContent = '检测到 ' + foreign + ' 正在覆盖同一批配色 token。'
-          + (resolved === 'material'
-            ? why + '只叠纸与灯，两套皮肤可以叠着用。'
-            : why + '本皮肤接管配色——两套同时改同一批 token，谁后加载谁赢。');
+    root.addEventListener("click", (event) => {
+      const button = event.target.closest("button.choice");
+      if (!button) return;
+      const group = button.parentElement.dataset.group;
+      onChange(KEY_OF[group] || group, button.dataset.value);
+      sync();
+    });
+    const handle = document.createElement("button");
+    handle.type = "button";
+    handle.className = "dn-handle";
+    handle.setAttribute("aria-expanded", "false");
+    handle.innerHTML = '<svg viewBox="0 0 16 16"><path d="M3 4h10M3 8h10M3 12h6"/></svg><span>缮写室</span>';
+    handle.addEventListener("click", () => {
+      const open = root.dataset.open !== "true";
+      root.dataset.open = String(open);
+      handle.setAttribute("aria-expanded", String(open));
+    });
+    function sync() {
+      const mark = (group, active) => {
+        for (const button of root.querySelectorAll('[data-group="' + group + '"] button.choice')) {
+          button.setAttribute("aria-pressed", String(button.dataset.value === active));
+        }
+      };
+      mark("theme", state.theme);
+      mark("paper", state.paper);
+      mark("cursor", state.cursorMode);
+      mark("coexist", state.coexist);
+      mark("scroll", state.scrollbar.style);
+      mark("finish", state.scrollbar.finish);
+      groupOf("finish").hidden = state.scrollbar.style !== "clip";
+      groupOf("bar-slider").hidden = state.scrollbar.style !== "bar";
+      const hint = root.querySelector('[data-group="coexist-hint"]');
+      const foreign = typeof options.foreign === "function" ? options.foreign() : null;
+      const resolved = typeof options.resolvedCoexist === "function" ? options.resolvedCoexist() : state.coexist === "auto" ? foreign ? "material" : "full" : state.coexist;
+      if (hint) {
+        if (foreign) {
+          hint.hidden = false;
+          const why = state.coexist === "auto" ? "已自动让位：" : "";
+          hint.textContent = "检测到 " + foreign + " 正在覆盖同一批配色 token。" + (resolved === "material" ? why + "只叠纸与灯，两套皮肤可以叠着用。" : why + "本皮肤接管配色——两套同时改同一批 token，谁后加载谁赢。");
+        } else {
+          hint.hidden = true;
+        }
+      }
+      toggle.setAttribute("aria-checked", String(state.lamp));
+      for (const read of reads) read();
+    }
+    sync();
+    return { element: root, handle, sync };
+  }
+
+  // packages/dsh-nocturne/src/core/scroll-clip.js
+  var CLIP_WIDTH = 84;
+  var CLIP_HEIGHT = 26;
+  var CLIP_EDGE = 88;
+  var CLIP_ON_PAPER = CLIP_WIDTH * CLIP_EDGE / 100;
+  var CLIP_REST_TILT = -0.1;
+  var CLIP_TRACK_MARGIN = 18;
+  var CLIP_GLIDE = { frequency: 5, damping: 0.72 };
+  var CLIP_TILT = { frequency: 3.2, damping: 0.35 };
+  var CLIP_TILT_REST = { distance: 1e-3, speed: 2e-3 };
+  var CLIP_PIXEL_REST = { distance: 0.4, speed: 12 };
+  var CLIP_RIGHT_INSET = 12;
+  var SPRING_SUBSTEP = 1 / 480;
+  var CLIP_FINISHES = {
+    silver: ["#ffffff", "#b9bfc7", "#4d535b"],
+    brass: ["#fff1c6", "#c19a52", "#4f3712"],
+    gold: ["#fff6cf", "#d9ad4c", "#6a4a0c"],
+    black: ["#9a9a9e", "#2e2e31", "#060607"]
+  };
+  var CLIP_FRONT = "M90 3 H14 A12 12 0 0 0 14 27 H70";
+  var CLIP_HINGE = "M90 21 A9 9 0 0 0 90 3";
+  var CLIP_TONGUE = "M76 9 H26 A6 6 0 0 0 26 21 H90";
+  function clipWire(d, colors) {
+    const light = colors[0];
+    const body = colors[1];
+    const edge = colors[2];
+    return '<g><path d="' + d + '" class="dn-clip-edge" stroke="' + edge + '"/><path d="' + d + '" class="dn-clip-body" stroke="' + body + '"/><path d="' + d + '" class="dn-clip-light" stroke="' + light + '" transform="translate(-0.3 -0.55)"/><path d="' + d + '" class="dn-clip-glint" transform="translate(-0.35 -0.6)"/></g>';
+  }
+  function stepSpring(body, target, params, dt, rest) {
+    const omega = 2 * Math.PI * params.frequency;
+    const stiffness = omega * omega;
+    const damping = 2 * params.damping * omega;
+    const limits = rest || { distance: 0.5, speed: 10 };
+    let position = body.position;
+    let velocity = body.velocity;
+    let remaining = Math.max(0, Math.min(dt, 0.1));
+    while (remaining > 0) {
+      const h = Math.min(SPRING_SUBSTEP, remaining);
+      remaining -= h;
+      const acceleration = -stiffness * (position - target) - damping * velocity;
+      velocity += acceleration * h;
+      position += velocity * h;
+    }
+    if (Math.abs(position - target) < limits.distance && Math.abs(velocity) < limits.speed) {
+      return { position: target, velocity: 0 };
+    }
+    return { position, velocity };
+  }
+  var ScrollClip = class {
+    constructor() {
+      this.element = null;
+      this.target = null;
+      this.shape = "";
+      this.y = { position: -1, velocity: 0 };
+      this.tilt = { position: 0, velocity: 0 };
+      this.trackTop = 0;
+      this.trackLeft = 0;
+      this.trackHeight = 0;
+      this.thumbHeight = CLIP_HEIGHT;
+      this.targetY = 0;
+      this.last = 0;
+      this.dragging = false;
+      this.needLayout = true;
+      this.placeDirty = true;
+      this.appearance = "light";
+      this.listeners = [];
+      this.padded = null;
+      this.paddingBefore = "";
+      this.preferred = null;
+      this.resizeObserver = null;
+      this.mutationObserver = null;
+    }
+    mount(options) {
+      const option = options || {};
+      const element = document.createElement("div");
+      element.className = "dn-scroll dn-scroll-clip";
+      element.hidden = true;
+      element.setAttribute("role", "scrollbar");
+      element.setAttribute("aria-orientation", "vertical");
+      element.setAttribute("aria-label", "滚动正文");
+      element.setAttribute("aria-valuemin", "0");
+      element.style.zIndex = String(option.zIndex == null ? 6 : option.zIndex);
+      element.dataset.appearance = "light";
+      (option.parent || document.body).appendChild(element);
+      this.element = element;
+      this.preferred = option.preferred || null;
+      this.bindPointer();
+      this.apply();
+      return element;
+    }
+    /** 设置变了就重来一遍：形状（纸夹/细杆/原生）与金属都可能换了。 */
+    apply() {
+      if (!this.element) return;
+      const settings = SETTINGS.scrollbar || {};
+      const style = settings.style === "bar" || settings.style === "native" ? settings.style : "clip";
+      if (style === "native") {
+        this.detach();
+        this.element.hidden = true;
+        this.y = { position: -1, velocity: 0 };
+        return;
+      }
+      const shape = style === "clip" ? "clip:" + (settings.finish || "silver") : "bar";
+      if (shape !== this.shape) {
+        this.shape = shape;
+        this.build(shape);
+        this.y = { position: -1, velocity: 0 };
+      }
+      this.needLayout = true;
+      this.layout();
+    }
+    build(shape) {
+      const element = this.element;
+      const clip = shape.indexOf("clip:") === 0;
+      element.className = "dn-scroll " + (clip ? "dn-scroll-clip" : "dn-scroll-bar");
+      if (clip) {
+        const finish = shape.slice(5);
+        const colors = CLIP_FINISHES[finish] || CLIP_FINISHES.silver;
+        const id = "dn-clip-" + finish;
+        element.style.transformOrigin = CLIP_ON_PAPER + "px 50%";
+        element.innerHTML = '<svg viewBox="0 -0.5 100 31" aria-hidden="true"><defs><clipPath id="' + id + '-paper"><rect x="-20" y="-20" width="' + (CLIP_EDGE + 20) + '" height="70"/></clipPath><clipPath id="' + id + '-beyond"><rect x="' + CLIP_EDGE + '" y="-20" width="40" height="70"/></clipPath><filter id="' + id + '-blur" x="-20%" y="-60%" width="140%" height="220%"><feGaussianBlur stdDeviation="1.1"/></filter></defs><g clip-path="url(#' + id + '-paper)"><path d="' + CLIP_TONGUE + '" class="dn-clip-pressed"/><path d="' + CLIP_FRONT + " " + CLIP_HINGE + '" class="dn-clip-shadow" filter="url(#' + id + '-blur)"/></g><g clip-path="url(#' + id + '-beyond)">' + clipWire(CLIP_TONGUE, colors) + "</g>" + clipWire(CLIP_HINGE, colors) + clipWire(CLIP_FRONT, colors) + "</svg>";
       } else {
-        hint.hidden = true;
+        element.style.transformOrigin = "50% 50%";
+        element.innerHTML = "";
       }
     }
-    toggle.setAttribute('aria-checked', String(state.lamp));
-    for (const read of reads) read();
-  }
-  sync();
-
-  return {element: root, handle, sync};
-}
-
-/* ═══════════════════════════════════════════════════════════════════════════
-   5.9 · 纸夹滚条
-   上游（lib/nocturne/components/scroll-clip.tsx）：一枚 Gem 夹夹在纸的右缘——
-   外圈在纸前，内舌在纸后（只留下压住纸面的一道痕），弯头探出纸外。它跟着滚动
-   位置走弹簧（5Hz / 阻尼 0.72），移动时朝反方向微微歪一下（3.2Hz / 0.35）。
-
-   这里没有终端，所以"滚动"换成任意滚动容器：从视口中线上那一点往上找。
-   整棵树可能上万节点，逐元素问 overflow 会把主线程按住——elementFromPoint
-   只走一条祖先链，代价与树的大小无关。
-   ═══════════════════════════════════════════════════════════════════════ */
-/** 画布 100 × 31 单位；屏幕上 84 × 26，纸边落在 88 单位处，所以弯头刚好探出去。 */
-const CLIP_WIDTH = 84;
-const CLIP_HEIGHT = 26;
-const CLIP_EDGE = 88;
-const CLIP_ON_PAPER = (CLIP_WIDTH * CLIP_EDGE) / 100;
-/** 手夹上去的夹子从来不会完全摆正。 */
-const CLIP_REST_TILT = -0.1;
-const CLIP_TRACK_MARGIN = 18;
-const CLIP_GLIDE = {frequency: 5, damping: 0.72};
-const CLIP_TILT = {frequency: 3.2, damping: 0.35};
-const CLIP_TILT_REST = {distance: 0.001, speed: 0.002};
-const CLIP_PIXEL_REST = {distance: 0.4, speed: 12};
-/** 夹子的握点离纸缘这么远：再远弯头就悬空，再近弯头会被窗口裁掉。 */
-const CLIP_RIGHT_INSET = 12;
-const SPRING_SUBSTEP = 1 / 480;
-
-/** 每种金属：高光、本体、暗边。 */
-const CLIP_FINISHES = {
-  silver: ['#ffffff', '#b9bfc7', '#4d535b'],
-  brass: ['#fff1c6', '#c19a52', '#4f3712'],
-  gold: ['#fff6cf', '#d9ad4c', '#6a4a0c'],
-  black: ['#9a9a9e', '#2e2e31', '#060607']
-};
-
-/** 金属丝的走线：外圈在纸前，内舌在纸后，中间的弯把两者接起来。 */
-const CLIP_FRONT = 'M90 3 H14 A12 12 0 0 0 14 27 H70';
-const CLIP_HINGE = 'M90 21 A9 9 0 0 0 90 3';
-const CLIP_TONGUE = 'M76 9 H26 A6 6 0 0 0 26 21 H90';
-
-/** 一段金属丝：暗边、金属本体、朝光的一侧高光。 */
-function clipWire(d, colors) {
-  const light = colors[0];
-  const body = colors[1];
-  const edge = colors[2];
-  return '<g>'
-    + '<path d="' + d + '" class="dn-clip-edge" stroke="' + edge + '"/>'
-    + '<path d="' + d + '" class="dn-clip-body" stroke="' + body + '"/>'
-    + '<path d="' + d + '" class="dn-clip-light" stroke="' + light
-    + '" transform="translate(-0.3 -0.55)"/>'
-    + '<path d="' + d + '" class="dn-clip-glint" transform="translate(-0.35 -0.6)"/>'
-    + '</g>';
-}
-
-/** 与上游同一份弹簧：substep 定步长，所以帧慢也不会炸。 */
-function stepSpring(body, target, params, dt, rest) {
-  const omega = 2 * Math.PI * params.frequency;
-  const stiffness = omega * omega;
-  const damping = 2 * params.damping * omega;
-  const limits = rest || {distance: 0.5, speed: 10};
-  let position = body.position;
-  let velocity = body.velocity;
-  let remaining = Math.max(0, Math.min(dt, 0.1));
-  while (remaining > 0) {
-    const h = Math.min(SPRING_SUBSTEP, remaining);
-    remaining -= h;
-    const acceleration = -stiffness * (position - target) - damping * velocity;
-    velocity += acceleration * h;
-    position += velocity * h;
-  }
-  if (Math.abs(position - target) < limits.distance && Math.abs(velocity) < limits.speed) {
-    return {position: target, velocity: 0};
-  }
-  return {position: position, velocity: velocity};
-}
-
-class ScrollClip {
-  constructor() {
-    this.element = null;
-    this.target = null;
-    this.shape = '';
-    this.y = {position: -1, velocity: 0};
-    this.tilt = {position: 0, velocity: 0};
-    this.trackTop = 0;
-    this.trackLeft = 0;
-    this.trackHeight = 0;
-    this.thumbHeight = CLIP_HEIGHT;
-    this.targetY = 0;
-    this.last = 0;
-    this.dragging = false;
-    this.needLayout = true;
-    this.placeDirty = true;
-    this.appearance = 'light';
-    this.listeners = [];
-    this.padded = null;
-    this.paddingBefore = '';
-    this.preferred = null;
-  }
-
-  mount(options) {
-    const option = options || {};
-    const element = document.createElement('div');
-    element.className = 'dn-scroll dn-scroll-clip';
-    element.hidden = true;
-    element.setAttribute('role', 'scrollbar');
-    element.setAttribute('aria-orientation', 'vertical');
-    element.setAttribute('aria-label', '滚动正文');
-    element.setAttribute('aria-valuemin', '0');
-    element.style.zIndex = String(option.zIndex == null ? 6 : option.zIndex);
-    element.dataset.appearance = 'light';
-    (option.parent || document.body).appendChild(element);
-    this.element = element;
-    this.preferred = option.preferred || null;
-    this.bindPointer();
-    this.apply();
-    return element;
-  }
-
-  /** 设置变了就重来一遍：形状（纸夹/细杆/原生）与金属都可能换了。 */
-  apply() {
-    if (!this.element) return;
-    const settings = SETTINGS.scrollbar || {};
-    const style = settings.style === 'bar' || settings.style === 'native' ? settings.style : 'clip';
-    if (style === 'native') {
-      this.detach();
-      this.element.hidden = true;
-      this.y = {position: -1, velocity: 0};
-      return;
-    }
-    const shape = style === 'clip' ? 'clip:' + (settings.finish || 'silver') : 'bar';
-    if (shape !== this.shape) {
-      this.shape = shape;
-      this.build(shape);
-      this.y = {position: -1, velocity: 0};
-    }
-    this.needLayout = true;
-    this.layout();
-  }
-
-  build(shape) {
-    const element = this.element;
-    const clip = shape.indexOf('clip:') === 0;
-    element.className = 'dn-scroll ' + (clip ? 'dn-scroll-clip' : 'dn-scroll-bar');
-    if (clip) {
-      const finish = shape.slice(5);
-      const colors = CLIP_FINISHES[finish] || CLIP_FINISHES.silver;
-      const id = 'dn-clip-' + finish;
-      element.style.transformOrigin = CLIP_ON_PAPER + 'px 50%';
-      element.innerHTML = '<svg viewBox="0 -0.5 100 31" aria-hidden="true">'
-        + '<defs>'
-        + '<clipPath id="' + id + '-paper"><rect x="-20" y="-20" width="'
-        + (CLIP_EDGE + 20) + '" height="70"/></clipPath>'
-        + '<clipPath id="' + id + '-beyond"><rect x="' + CLIP_EDGE
-        + '" y="-20" width="40" height="70"/></clipPath>'
-        + '<filter id="' + id + '-blur" x="-20%" y="-60%" width="140%" height="220%">'
-        + '<feGaussianBlur stdDeviation="1.1"/></filter>'
-        + '</defs>'
-        // 纸面上：内舌压出的痕，和夹子投下的影。
-        + '<g clip-path="url(#' + id + '-paper)">'
-        + '<path d="' + CLIP_TONGUE + '" class="dn-clip-pressed"/>'
-        + '<path d="' + CLIP_FRONT + ' ' + CLIP_HINGE + '" class="dn-clip-shadow" filter="url(#'
-        + id + '-blur)"/>'
-        + '</g>'
-        // 纸外：探出去的那一段内舌，只有弯头以外才看得见。
-        + '<g clip-path="url(#' + id + '-beyond)">' + clipWire(CLIP_TONGUE, colors) + '</g>'
-        + clipWire(CLIP_HINGE, colors)
-        + clipWire(CLIP_FRONT, colors)
-        + '</svg>';
-    } else {
-      element.style.transformOrigin = '50% 50%';
-      element.innerHTML = '';
-    }
-  }
-
-  /** 几何：找到滚动容器，把轨道、滑块长度、当前位置一次算出来。 */
-  layout() {
-    if (!this.element) return;
-    if (!this.target || !this.target.isConnected) {
-      this.attach();
-      if (!this.target) {
+    /** 几何：找到滚动容器，把轨道、滑块长度、当前位置一次算出来。 */
+    layout() {
+      if (!this.element) return;
+      if (!this.target || !this.target.isConnected) {
+        this.attach();
+        if (!this.target) {
+          this.element.hidden = true;
+          return;
+        }
+      }
+      const target = this.target;
+      const base = target.scrollHeight - target.clientHeight;
+      if (base <= 8) {
         this.element.hidden = true;
         return;
       }
-    }
-    const target = this.target;
-    const base = target.scrollHeight - target.clientHeight;
-    if (base <= 8) {
-      this.element.hidden = true;
-      return;
-    }
-    this.element.hidden = false;
-    const rect = target.getBoundingClientRect();
-    const settings = SETTINGS.scrollbar || {};
-    const clip = this.shape.indexOf('clip:') === 0;
-    this.trackTop = rect.top + CLIP_TRACK_MARGIN;
-    this.trackHeight = Math.max(40, rect.height - CLIP_TRACK_MARGIN * 2);
-    // 挂在纸缘上，而不是正文栏的右缘：正文栏右缘上有字，夹子本身有 74px 长，
-    // 挂上去就会压住最后几个字。整扇窗就是这张纸，所以取窗口右缘。
-    this.trackLeft = window.innerWidth - CLIP_RIGHT_INSET;
-    this.thumbHeight = clip
-      ? CLIP_HEIGHT
-      : Math.max(28, (this.trackHeight * target.clientHeight) / target.scrollHeight);
-    const travel = Math.max(1, this.trackHeight - this.thumbHeight);
-    this.targetY = this.trackTop + clamp(target.scrollTop / base, 0, 1) * travel;
-    if (this.appearance !== paper().appearance) {
-      this.appearance = paper().appearance;
-      this.element.dataset.appearance = this.appearance;
-    }
-    if (clip) {
-      this.element.style.left = (this.trackLeft - CLIP_ON_PAPER) + 'px';
-      this.element.style.width = CLIP_WIDTH + 'px';
-      this.element.style.height = CLIP_HEIGHT + 'px';
-      this.element.style.opacity = '';
-    } else {
-      const width = Math.max(2, Number(settings.barWidth) || 6);
-      this.element.style.left = (this.trackLeft - width - 3) + 'px';
-      this.element.style.width = width + 'px';
-      this.element.style.height = this.thumbHeight + 'px';
-      this.element.style.opacity = String(clamp(
-        settings.barOpacity == null ? 0.45 : Number(settings.barOpacity), 0, 1));
-    }
-    this.element.setAttribute('aria-valuemax', String(Math.round(base)));
-    this.element.setAttribute('aria-valuenow', String(Math.round(target.scrollTop)));
-    // 第一帧直接落位：不从屏幕顶上滑进来。
-    if (this.y.position < 0 || reduceMotion) {
-      this.y = {position: this.targetY, velocity: 0};
-      this.tilt = {position: 0, velocity: 0};
-    }
-    this.placeDirty = true;
-  }
-
-  place() {
-    if (!this.element) return;
-    const clip = this.element.classList.contains('dn-scroll-clip');
-    const tilt = clip ? CLIP_REST_TILT + this.tilt.position : 0;
-    this.element.style.transform = 'translateY(' + this.y.position.toFixed(2)
-      + 'px) rotate(' + tilt.toFixed(4) + 'rad)';
-  }
-
-  /** 滚动位置每帧推进弹簧；返回是否还在动。 */
-  step(now) {
-    if (!this.element) return false;
-    // 找不到滚动容器就隔 500ms 再找一次：正文栏、会话列表都可能比插件晚挂上。
-    const stale = !this.target || !this.target.isConnected;
-    if (this.needLayout || (stale && now - (this.lastProbe || 0) > 500)) {
-      this.needLayout = false;
-      this.lastProbe = now;
-      this.layout();
-    }
-    if (!this.target || this.element.hidden) return false;
-    let last = this.last;
-    let remaining = last ? Math.min(0.5, (now - last) / 1000) : 1 / 60;
-    this.last = now;
-    const clip = this.shape.indexOf('clip:') === 0;
-    while (remaining > 0) {
-      const dt = Math.min(1 / 60, remaining);
-      remaining -= dt;
-      const previous = this.y.velocity;
-      if (!this.dragging) this.y = stepSpring(this.y, this.targetY, CLIP_GLIDE, dt, CLIP_PIXEL_REST);
-      // 被推着走的轻东西会朝相反方向歪，然后荡回来。
-      const lean = -this.y.velocity * 0.0009
-        - ((this.y.velocity - previous) / Math.max(dt, 1 / 240)) * 0.00002;
-      this.tilt = stepSpring(this.tilt, clamp(lean, -0.22, 0.22), CLIP_TILT, dt, CLIP_TILT_REST);
-    }
-    const moving = Math.abs(this.y.position - this.targetY) > 0.05
-      || this.y.velocity !== 0 || this.tilt.velocity !== 0;
-    if (moving || this.dragging || this.placeDirty) {
-      this.place();
-      this.placeDirty = false;
-    }
-    if (!moving && !this.dragging) this.last = 0;
-    return moving || clip;
-  }
-
-  bindPointer() {
-    const element = this.element;
-    element.addEventListener('pointerdown', (event) => {
-      // 不让拖动把焦点从输入框抢走。
-      event.preventDefault();
-      try { element.setPointerCapture(event.pointerId); } catch (error) { /* 旧内核 */ }
-      this.dragging = true;
-      this.grab = event.clientY - this.y.position;
-    });
-    element.addEventListener('pointermove', (event) => {
-      if (!this.dragging || !this.target) return;
+      this.element.hidden = false;
+      const rect = target.getBoundingClientRect();
+      const settings = SETTINGS.scrollbar || {};
+      const clip = this.shape.indexOf("clip:") === 0;
+      this.trackTop = rect.top + CLIP_TRACK_MARGIN;
+      this.trackHeight = Math.max(40, rect.height - CLIP_TRACK_MARGIN * 2);
+      this.trackLeft = window.innerWidth - CLIP_RIGHT_INSET;
+      this.thumbHeight = clip ? CLIP_HEIGHT : Math.max(28, this.trackHeight * target.clientHeight / target.scrollHeight);
       const travel = Math.max(1, this.trackHeight - this.thumbHeight);
-      const y = clamp(event.clientY - this.grab, this.trackTop, this.trackTop + travel);
-      this.y = {position: y, velocity: (y - this.y.position) * 60};
-      const base = Math.max(0, this.target.scrollHeight - this.target.clientHeight);
-      this.target.scrollTop = ((y - this.trackTop) / travel) * base;
-      this.placeDirty = true;
-    });
-    const stop = (event) => {
-      if (!this.dragging) return;
-      this.dragging = false;
-      if (event.pointerId != null) {
-        try { element.releasePointerCapture(event.pointerId); } catch (error) { /* 已经释放 */ }
+      this.targetY = this.trackTop + clamp(target.scrollTop / base, 0, 1) * travel;
+      if (this.appearance !== paper().appearance) {
+        this.appearance = paper().appearance;
+        this.element.dataset.appearance = this.appearance;
+      }
+      if (clip) {
+        this.element.style.left = this.trackLeft - CLIP_ON_PAPER + "px";
+        this.element.style.width = CLIP_WIDTH + "px";
+        this.element.style.height = CLIP_HEIGHT + "px";
+        this.element.style.opacity = "";
+      } else {
+        const width = Math.max(2, Number(settings.barWidth) || 6);
+        this.element.style.left = this.trackLeft - width - 3 + "px";
+        this.element.style.width = width + "px";
+        this.element.style.height = this.thumbHeight + "px";
+        this.element.style.opacity = String(clamp(
+          settings.barOpacity == null ? 0.45 : Number(settings.barOpacity),
+          0,
+          1
+        ));
+      }
+      this.element.setAttribute("aria-valuemax", String(Math.round(base)));
+      this.element.setAttribute("aria-valuenow", String(Math.round(target.scrollTop)));
+      if (this.y.position < 0 || reduceMotion) {
+        this.y = { position: this.targetY, velocity: 0 };
+        this.tilt = { position: 0, velocity: 0 };
       }
       this.placeDirty = true;
-    };
-    element.addEventListener('pointerup', stop);
-    element.addEventListener('pointercancel', stop);
-  }
-
-  /** 从视口中线那一点往上找可滚动容器：只走一条祖先链，代价与树的大小无关。 */
-  findScroller() {
-    if (this.preferred) {
-      const node = document.querySelector(this.preferred);
-      if (node && this.canScroll(node)) return node;
     }
-    const canScroll = (node) => this.canScroll(node);
-    let node = document.elementFromPoint(
-      Math.round(window.innerWidth * 0.5), Math.round(window.innerHeight * 0.45));
-    let best = null;
-    let bestHeight = 0;
-    let guard = 0;
-    while (node && guard < 40) {
-      guard += 1;
-      if (canScroll(node)) {
-        const height = node.getBoundingClientRect().height;
-        if (height > window.innerHeight * 0.55) return node;
-        if (height > bestHeight) { best = node; bestHeight = height; }
+    place() {
+      if (!this.element) return;
+      const clip = this.element.classList.contains("dn-scroll-clip");
+      const tilt = clip ? CLIP_REST_TILT + this.tilt.position : 0;
+      this.element.style.transform = "translateY(" + this.y.position.toFixed(2) + "px) rotate(" + tilt.toFixed(4) + "rad)";
+    }
+    /** 滚动位置每帧推进弹簧；返回是否还在动。 */
+    step(now) {
+      if (!this.element) return false;
+      const stale = !this.target || !this.target.isConnected;
+      if (this.needLayout && now - (this.lastLayout || 0) >= 66) {
+        this.needLayout = false;
+        this.lastLayout = now;
+        this.layout();
       }
-      node = node.parentElement;
+      if (stale && now - (this.lastProbe || 0) > 500) {
+        this.needLayout = false;
+        this.lastProbe = now;
+        this.layout();
+      }
+      if (!this.target || this.element.hidden) return false;
+      let last = this.last;
+      let remaining = last ? Math.min(0.5, (now - last) / 1e3) : 1 / 60;
+      this.last = now;
+      while (remaining > 0) {
+        const dt = Math.min(1 / 60, remaining);
+        remaining -= dt;
+        const previous = this.y.velocity;
+        if (!this.dragging) this.y = stepSpring(this.y, this.targetY, CLIP_GLIDE, dt, CLIP_PIXEL_REST);
+        const lean = -this.y.velocity * 9e-4 - (this.y.velocity - previous) / Math.max(dt, 1 / 240) * 2e-5;
+        this.tilt = stepSpring(this.tilt, clamp(lean, -0.22, 0.22), CLIP_TILT, dt, CLIP_TILT_REST);
+      }
+      const moving = Math.abs(this.y.position - this.targetY) > 0.05 || this.y.velocity !== 0 || this.tilt.velocity !== 0;
+      if (moving || this.dragging || this.placeDirty) {
+        this.place();
+        this.placeDirty = false;
+      }
+      if (!moving && !this.dragging) this.last = 0;
+      return moving || this.dragging;
     }
-    if (best) return best;
-    const root = document.scrollingElement;
-    if (root && this.canScroll(root)) return root;
-    return null;
-  }
-
-  canScroll(node) {
-    if (!node || node.nodeType !== 1) return false;
-    const overflow = getComputedStyle(node).overflowY;
-    if (!/(auto|scroll|overlay)/.test(overflow)) return false;
-    return node.scrollHeight - node.clientHeight > 8;
-  }
-
-  attach() {
-    const next = this.findScroller();
-    if (!next) { this.detach(); return; }
-    if (next === this.target) return;
-    this.detach();
-    this.target = next;
-    const onScroll = () => { this.needLayout = true; };
-    next.addEventListener('scroll', onScroll, {passive: true});
-    this.listeners.push({target: next, type: 'scroll', handler: onScroll});
-    this.hideNative(next);
-    this.needLayout = true;
-  }
-
-  /** 容器的原生滚条让位；用内边距补回被让出的宽度，避免正文横向跳一下。 */
-  hideNative(element) {
-    if (element.dataset.dnScroll === 'custom') return;
-    const before = element.clientWidth;
-    element.dataset.dnScroll = 'custom';
-    const after = element.clientWidth;
-    if (after > before + 0.5) {
-      const padding = parseFloat(getComputedStyle(element).paddingRight) || 0;
-      this.paddingBefore = element.style.paddingRight;
-      element.style.paddingRight = (padding + (after - before)) + 'px';
-      this.padded = element;
+    bindPointer() {
+      const element = this.element;
+      element.addEventListener("pointerdown", (event) => {
+        event.preventDefault();
+        try {
+          element.setPointerCapture(event.pointerId);
+        } catch (error) {
+        }
+        this.dragging = true;
+        this.grab = event.clientY - this.y.position;
+      });
+      element.addEventListener("pointermove", (event) => {
+        if (!this.dragging || !this.target) return;
+        const travel = Math.max(1, this.trackHeight - this.thumbHeight);
+        const y = clamp(event.clientY - this.grab, this.trackTop, this.trackTop + travel);
+        this.y = { position: y, velocity: (y - this.y.position) * 60 };
+        const base = Math.max(0, this.target.scrollHeight - this.target.clientHeight);
+        this.target.scrollTop = (y - this.trackTop) / travel * base;
+        this.placeDirty = true;
+      });
+      const stop = (event) => {
+        if (!this.dragging) return;
+        this.dragging = false;
+        if (event.pointerId != null) {
+          try {
+            element.releasePointerCapture(event.pointerId);
+          } catch (error) {
+          }
+        }
+        this.placeDirty = true;
+      };
+      element.addEventListener("pointerup", stop);
+      element.addEventListener("pointercancel", stop);
     }
-  }
-
-  detach() {
-    for (const item of this.listeners) item.target.removeEventListener(item.type, item.handler);
-    this.listeners = [];
-    if (this.target) {
-      if (this.target.dataset) delete this.target.dataset.dnScroll;
-      if (this.padded === this.target) this.target.style.paddingRight = this.paddingBefore || '';
-      this.target = null;
+    /** 从视口中线那一点往上找可滚动容器：只走一条祖先链，代价与树的大小无关。 */
+    findScroller() {
+      if (this.preferred) {
+        const node2 = document.querySelector(this.preferred);
+        if (node2 && this.canScroll(node2)) return node2;
+      }
+      const canScroll = (node2) => this.canScroll(node2);
+      let node = document.elementFromPoint(
+        Math.round(window.innerWidth * 0.5),
+        Math.round(window.innerHeight * 0.45)
+      );
+      let best = null;
+      let bestHeight = 0;
+      let guard = 0;
+      while (node && guard < 40) {
+        guard += 1;
+        if (canScroll(node)) {
+          const height = node.getBoundingClientRect().height;
+          if (height > window.innerHeight * 0.55) return node;
+          if (height > bestHeight) {
+            best = node;
+            bestHeight = height;
+          }
+        }
+        node = node.parentElement;
+      }
+      if (best) return best;
+      const root = document.scrollingElement;
+      if (root && this.canScroll(root)) return root;
+      return null;
     }
-    this.padded = null;
-    this.needLayout = true;
-  }
-
-  destroy() {
-    this.detach();
-    if (this.element && this.element.parentNode) this.element.remove();
-    this.element = null;
-  }
-}
-
-/* ═══════════════════════════════════════════════════════════════════════════
-   6 · 装配与主循环
-   ═══════════════════════════════════════════════════════════════════════ */
-const sheetEl = document.getElementById('sheet');
-const paperCanvas = document.getElementById('paper');
-const glowCanvas = document.getElementById('glow');
-const inputEl = document.getElementById('input');
-const rootStyle = document.documentElement.style;
-
-/* 深链：?paper=cotton&lamp=0&theme=moonlit-poetry —— 样张要能被逐个参数抓起截图 */
-try {
-  const params = new URLSearchParams(location.search);
-  const wantedPaper = params.get('paper');
-  if (wantedPaper && PAPERS[wantedPaper]) SETTINGS.paper = wantedPaper;
-  const wantedTheme = params.get('theme');
-  if (wantedTheme && THEMES[wantedTheme]) SETTINGS.theme = wantedTheme;
-  if (params.get('lamp') === '0') SETTINGS.lamp = false;
-  if (params.get('intensity')) SETTINGS.intensity = Number(params.get('intensity'));
-  if (params.get('grain')) SETTINGS.grain = Number(params.get('grain'));
-  const wantedCursor = params.get('cursor');
-  if (wantedCursor === 'ink' || wantedCursor === 'quill' || wantedCursor === 'none') SETTINGS.cursorMode = wantedCursor;
-  if (params.get('studio') === '1') {
-    // 截图用：直接把缮写室打开
-    window.__openStudio = true;
-  }
-  if (params.get('caret')) {
-    // 截图用：填一段字并把光标放到末尾，好让墨迹光标有东西可反白
-    inputEl.value = params.get('caret');
-    inputEl.focus();
-    const at = Math.min(inputEl.value.length, Number(params.get('caretAt') || inputEl.value.length));
-    inputEl.setSelectionRange(at, at);
-  }
-} catch (error) { /* 老浏览器：走默认 */ }
-
-const paperLight = new PaperLight(paperCanvas);
-const glow = new GlowLayer(glowCanvas);
-const measure = document.createElement('canvas').getContext('2d');
-
-let sheetSize = {width: 1, height: 1};
-let sheetOrigin = {left: 0, top: 0};
-let needsBuild = true;
-let needsLight = true;
-let lastLightAt = 0;
-
-/** 墨迹光标。它躺在纸光之下，所以灯把它和字一起照亮——这正是上游的语义。 */
-const inkCaret = new InkCaret();
-inkCaret.mount(paperCanvas);
-inkCaret.mode = SETTINGS.cursorMode;
-
-
-/** 纸夹：夹在正文栏的右缘。样张里正文栏自己滚，所以挂上就有东西可夹。 */
-const scrollClip = new ScrollClip();
-scrollClip.mount({zIndex: 6, preferred: '.scroll'});
-
-
-/** 选区底色跟着纸与房间走。 */
-function setWash() {
-  rootStyle.setProperty('--dn-selection', washColor());
-}
-setWash();
-
-function relayout() {
-  const dpr = Math.min(2, window.devicePixelRatio || 1);
-  const rect = sheetEl.getBoundingClientRect();
-  const width = Math.max(1, Math.round(rect.width));
-  const height = Math.max(1, Math.round(rect.height));
-  const changed = width !== sheetSize.width || height !== sheetSize.height;
-  sheetSize = {width, height};
-  paperCanvas.style.width = width + 'px';
-  paperCanvas.style.height = height + 'px';
-  glowCanvas.style.width = width + 'px';
-  glowCanvas.style.height = height + 'px';
-  glow.resize(width, height, dpr);
-  if (changed || needsBuild) {
-    paperLight.build({width, height, pixelRatio: dpr, p: paper()});
-    needsBuild = false;
-    needsLight = true;
-  }
-  sheetOrigin = {left: rect.left, top: rect.top};
-  scrollClip.needLayout = true;
-  syncRoomLight(inkCaret.point);
-}
-
-/** 房间里的光位跟着灯走——灯跟着墨迹光标走。 */
-function syncRoomLight(point) {
-  const pageX = point ? point.x : sheetOrigin.left + sheetSize.width / 2;
-  rootStyle.setProperty('--light-x', Math.round(clamp(pageX / window.innerWidth, .1, .9) * 100) + '%');
-}
-
-function frame(now) {
-  // 渲染循环是这条皮肤的命：任何异常都不许把它掐断，否则纸会停在最后一帧。
-  try {
-    paintFrame(now);
-  } catch (error) {
-    if (!frame.__warned) { frame.__warned = true; console.warn('nocturne frame skipped:', error); }
-  }
-  requestAnimationFrame(frame);
-}
-
-function paintFrame(now) {
-  const time = now / 1000;
-  const appearance = paper().appearance;
-  const point = inkCaret.sync();
-  if (point) syncRoomLight(point);
-  const caretSheetX = point ? point.x - sheetOrigin.left : sheetSize.width / 2;
-  const rig = buildRig(sheetSize, caretSheetX);
-  const lightOn = SETTINGS.lamp && SETTINGS.enabled;
-  const animateGrain = SETTINGS.grain > 0 && !reduceMotion;
-
-  if (needsLight || (animateGrain && now - lastLightAt > 90)) {
-    paperLight.render(rig, paper(), animateGrain ? time : 0);
-    needsLight = false;
-    lastLightAt = now;
-  }
-
-  const lightChannels = toUnit(theme().light.color).map((c) => Math.round(c * 255));
-  const poolChannels = poolColor(appearance);
-
-  glow.render({
-    rig,
-    lamp: lightOn,
-    rgb: lightChannels.join(', '),
-    poolRgb: poolChannels.join(', '),
-    appearance,
-    intensity: SETTINGS.intensity,
-    particles: SETTINGS.particles,
-    cursorGlow: SETTINGS.cursorGlow,
-    cursor: point
-      ? {x: point.x - sheetOrigin.left + 4, y: point.y - sheetOrigin.top + point.height / 2}
-      : null,
-    time
-  });
-
-  rootStyle.setProperty('--light-rgb', lightChannels.join(' '));
-
-  // 纸夹是压在纸上的器物，最后画。
-  scrollClip.step(now);
-}
-
-/** 换纸：纸色、墨色、描边、强调色一起换。 */
-function applyPaper(id) {
-  SETTINGS.paper = id;
-  const p = paper();
-  rootStyle.setProperty('--paper', p.paper);
-  rootStyle.setProperty('--ink', p.ink);
-  rootStyle.setProperty('--ink-muted', p.inkMuted);
-  rootStyle.setProperty('--ink-faint', p.inkMuted);
-  rootStyle.setProperty('--cursor', p.cursor);
-  rootStyle.setProperty('--selection', p.selection);
-  setWash();
-  const dark = p.appearance === 'dark';
-  rootStyle.setProperty('--border', dark ? 'rgba(230,225,234,.16)' : 'rgba(42,32,25,.16)');
-  rootStyle.setProperty('--border-strong', dark ? 'rgba(230,225,234,.30)' : 'rgba(42,32,25,.30)');
-  rootStyle.setProperty('--gilt', dark ? '#c9a45c' : '#b08a4a');
-  rootStyle.setProperty('--gilt-text', dark ? '#e3c48a' : '#6f5420');
-  rootStyle.setProperty('--gilt-soft', dark ? '#efdfb2' : '#d9c08a');
-  rootStyle.setProperty('--accent', dark ? '#8ea8e0' : '#2f5277');
-  rootStyle.setProperty('--prose-ink', dark ? '#ded8e6' : '#241b14');
-  rootStyle.setProperty('--prose-strong', dark ? '#f2eef8' : '#1d1610');
-  rootStyle.setProperty('--ink-muted', dark ? '#9a94a6' : '#6b5f52');
-  document.body.style.color = p.ink;
-  sheetEl.style.boxShadow = dark
-    ? '0 0 0 1px rgba(0,0,0,.5), 0 34px 70px -24px rgba(0,0,0,.9)'
-    : '0 0 0 1px rgba(0,0,0,.18), 0 34px 70px -24px rgba(0,0,0,.75)';
-  if (studio) studio.sync();
-  updateLeaf();
-  needsBuild = true;
-  relayout();
-}
-
-/**
- * 换房间：主题管「桌面与灯」（房间色、装饰金、渐晕、光色），纸管「纸与墨」。
- * 上游的纸与主题是正交的——子夜书斋可以配棉浆，月下诗稿可以配帘纹。
- */
-function applyTheme(id) {
-  if (!THEMES[id]) return;
-  SETTINGS.theme = id;
-  const t = theme();
-  rootStyle.setProperty('--room', t.palette.room);
-  rootStyle.setProperty('--room-edge', t.palette.roomEdge);
-  rootStyle.setProperty('--gilt', t.appearance === 'dark' ? '#c9a45c' : t.palette.accent);
-  rootStyle.setProperty('--gilt-soft', t.palette.accentSoft);
-  rootStyle.setProperty('--gilt-text', t.appearance === 'dark' ? '#e3c48a' : '#6f5420');
-  rootStyle.setProperty('--vignette', String(t.atmosphere.vignette));
-  setWash();
-  rootStyle.setProperty('--light-rgb', toUnit(t.light.color).map((c) => Math.round(c * 255)).join(' '));
-  if (studio) studio.sync();
-  updateLeaf();
-  needsLight = true;
-}
-
-/** 页眉那一行：房间名 + 纸名。它也在纸的受光里，所以必须跟着换。 */
-function updateLeaf() {
-  const leaf = document.getElementById('sheet-where');
-  if (!leaf) return;
-  const names = {
-    'paper-and-ink': 'Paper & Ink',
-    'midnight-study': 'Midnight Study',
-    'moonlit-poetry': 'Moonlit Poetry'
+    canScroll(node) {
+      if (!node || node.nodeType !== 1) return false;
+      const overflow = getComputedStyle(node).overflowY;
+      if (!/(auto|scroll|overlay)/.test(overflow)) return false;
+      return node.scrollHeight - node.clientHeight > 8;
+    }
+    attach() {
+      const next = this.findScroller();
+      if (!next) {
+        this.detach();
+        return;
+      }
+      if (next === this.target) return;
+      this.detach();
+      this.target = next;
+      const onScroll = () => {
+        this.needLayout = true;
+      };
+      next.addEventListener("scroll", onScroll, { passive: true });
+      this.listeners.push({ target: next, type: "scroll", handler: onScroll });
+      const invalidate = () => {
+        this.needLayout = true;
+      };
+      if (typeof ResizeObserver === "function") {
+        this.resizeObserver = new ResizeObserver(invalidate);
+        this.resizeObserver.observe(next);
+      }
+      if (typeof MutationObserver === "function") {
+        this.mutationObserver = new MutationObserver(invalidate);
+        this.mutationObserver.observe(next, { childList: true, subtree: true, characterData: true, attributes: true });
+      }
+      this.hideNative(next);
+      this.needLayout = true;
+    }
+    /** 容器的原生滚条让位；用内边距补回被让出的宽度，避免正文横向跳一下。 */
+    hideNative(element) {
+      if (element.dataset.dnScroll === "custom") return;
+      const before = element.clientWidth;
+      element.dataset.dnScroll = "custom";
+      const after = element.clientWidth;
+      if (after > before + 0.5) {
+        const padding = parseFloat(getComputedStyle(element).paddingRight) || 0;
+        this.paddingBefore = element.style.paddingRight;
+        element.style.paddingRight = padding + (after - before) + "px";
+        this.padded = element;
+      }
+    }
+    detach() {
+      for (const item of this.listeners) item.target.removeEventListener(item.type, item.handler);
+      this.listeners = [];
+      if (this.resizeObserver) this.resizeObserver.disconnect();
+      if (this.mutationObserver) this.mutationObserver.disconnect();
+      this.resizeObserver = null;
+      this.mutationObserver = null;
+      if (this.target) {
+        if (this.target.dataset) delete this.target.dataset.dnScroll;
+        if (this.padded === this.target) this.target.style.paddingRight = this.paddingBefore || "";
+        this.target = null;
+      }
+      this.padded = null;
+      this.needLayout = true;
+    }
+    destroy() {
+      this.detach();
+      if (this.element && this.element.parentNode) this.element.remove();
+      this.element = null;
+    }
   };
-  leaf.textContent = (names[SETTINGS.theme] || SETTINGS.theme) + ' · ' + paper().name;
-}
 
-/**
- * 缮写室。每一项都直通渲染参数：纸与房间走 apply*，灯与颗粒只重画光，
- * 纸纹深度要重建 surface pass（那是唯一有代价的一项）。
- */
-let studio = null;
-studio = buildStudio({
-  state: () => SETTINGS,
-  onChange(key, value) {
-    if (key === 'preset') {
-      Object.assign(SETTINGS, JSON.parse(JSON.stringify(NOCTURNE_DEFAULTS)));
-      scrollClip.apply();
-      applyTheme(SETTINGS.theme);
-      applyPaper(SETTINGS.paper);
-      inkCaret.setMode(SETTINGS.cursorMode);
-      lampButton.setAttribute('aria-pressed', String(SETTINGS.lamp));
-      needsBuild = true;
+  // sample/nocturne-desk.js
+  var sheetEl = document.getElementById("sheet");
+  var paperCanvas = document.getElementById("paper");
+  var glowCanvas = document.getElementById("glow");
+  var inputEl = document.getElementById("input");
+  var rootStyle = document.documentElement.style;
+  try {
+    const params = new URLSearchParams(location.search);
+    const wantedPaper = params.get("paper");
+    if (wantedPaper && PAPERS[wantedPaper]) SETTINGS.paper = wantedPaper;
+    const wantedTheme = params.get("theme");
+    if (wantedTheme && THEMES[wantedTheme]) SETTINGS.theme = wantedTheme;
+    if (params.get("lamp") === "0") SETTINGS.lamp = false;
+    if (params.get("intensity")) SETTINGS.intensity = Number(params.get("intensity"));
+    if (params.get("grain")) SETTINGS.grain = Number(params.get("grain"));
+    const wantedCursor = params.get("cursor");
+    if (wantedCursor === "ink" || wantedCursor === "quill" || wantedCursor === "none") SETTINGS.cursorMode = wantedCursor;
+    if (params.get("studio") === "1") {
+      window.__openStudio = true;
+    }
+    if (params.get("caret")) {
+      inputEl.value = params.get("caret");
+      inputEl.focus();
+      const at = Math.min(inputEl.value.length, Number(params.get("caretAt") || inputEl.value.length));
+      inputEl.setSelectionRange(at, at);
+    }
+  } catch (error) {
+  }
+  var paperLight = new PaperLight(paperCanvas);
+  var glow = new GlowLayer(glowCanvas);
+  var measure = document.createElement("canvas").getContext("2d");
+  var sheetSize = { width: 1, height: 1 };
+  var sheetOrigin = { left: 0, top: 0 };
+  var needsBuild = true;
+  var needsLight = true;
+  var lastLightAt = 0;
+  var inkCaret = new InkCaret();
+  inkCaret.mount(paperCanvas);
+  inkCaret.mode = SETTINGS.cursorMode;
+  var scrollClip = new ScrollClip();
+  scrollClip.mount({ zIndex: 6, preferred: ".scroll" });
+  function setWash() {
+    rootStyle.setProperty("--dn-selection", washColor());
+  }
+  setWash();
+  function relayout() {
+    const dpr = Math.min(2, window.devicePixelRatio || 1);
+    const rect = sheetEl.getBoundingClientRect();
+    const width = Math.max(1, Math.round(rect.width));
+    const height = Math.max(1, Math.round(rect.height));
+    const changed = width !== sheetSize.width || height !== sheetSize.height;
+    sheetSize = { width, height };
+    paperCanvas.style.width = width + "px";
+    paperCanvas.style.height = height + "px";
+    glowCanvas.style.width = width + "px";
+    glowCanvas.style.height = height + "px";
+    glow.resize(width, height, dpr);
+    if (changed || needsBuild) {
+      paperLight.build({ width, height, pixelRatio: dpr, p: paper() });
+      needsBuild = false;
       needsLight = true;
-      studio.sync();
-      return;
     }
-    if (key === 'paper') { applyPaper(value); return; }
-    if (key === 'theme') { applyTheme(value); return; }
-    if (key === 'cursor') {
-      SETTINGS.cursorMode = value;
-      inkCaret.setMode(value);
-      studio.sync();
-      return;
+    sheetOrigin = { left: rect.left, top: rect.top };
+    scrollClip.needLayout = true;
+    syncRoomLight(inkCaret.point);
+  }
+  function syncRoomLight(point) {
+    const pageX = point ? point.x : sheetOrigin.left + sheetSize.width / 2;
+    rootStyle.setProperty("--light-x", Math.round(clamp(pageX / window.innerWidth, 0.1, 0.9) * 100) + "%");
+  }
+  function frame(now) {
+    try {
+      paintFrame(now);
+    } catch (error) {
+      if (!frame.__warned) {
+        frame.__warned = true;
+        console.warn("nocturne frame skipped:", error);
+      }
     }
-    if (key === 'lamp') {
-      SETTINGS.lamp = value;
-      lampButton.setAttribute('aria-pressed', String(value));
-      needsLight = true;
-      return;
+    requestAnimationFrame(frame);
+  }
+  function paintFrame(now) {
+    const time = now / 1e3;
+    const appearance = paper().appearance;
+    const point = inkCaret.sync();
+    if (point) syncRoomLight(point);
+    const caretSheetX = point ? point.x - sheetOrigin.left : sheetSize.width / 2;
+    const rig = buildRig(sheetSize, caretSheetX);
+    const lightOn = SETTINGS.lamp && SETTINGS.enabled;
+    const animateGrain = SETTINGS.grain > 0 && !reduceMotion;
+    if (needsLight || animateGrain && now - lastLightAt > 90) {
+      paperLight.render(rig, paper(), animateGrain ? time : 0);
+      needsLight = false;
+      lastLightAt = now;
     }
-    if (key === 'scrollStyle' || key === 'scrollFinish') {
-      SETTINGS.scrollbar[key === 'scrollStyle' ? 'style' : 'finish'] = value;
-      scrollClip.apply();
-      studio.sync();
-      return;
-    }
-    if (key === 'scrollBarWidth' || key === 'scrollBarOpacity') {
-      SETTINGS.scrollbar[key === 'scrollBarWidth' ? 'barWidth' : 'barOpacity'] = value;
-      scrollClip.apply();
-      return;
-    }
-    SETTINGS[key] = value;
-    if (key === 'texture') needsBuild = true;
+    const lightChannels = toUnit(theme().light.color).map((c) => Math.round(c * 255));
+    const poolChannels = poolColor(appearance);
+    glow.render({
+      rig,
+      lamp: lightOn,
+      rgb: lightChannels.join(", "),
+      poolRgb: poolChannels.join(", "),
+      appearance,
+      intensity: SETTINGS.intensity,
+      particles: SETTINGS.particles,
+      cursorGlow: SETTINGS.cursorGlow,
+      cursor: point ? { x: point.x - sheetOrigin.left + 4, y: point.y - sheetOrigin.top + point.height / 2 } : null,
+      time: reduceMotion ? 0 : time
+    });
+    rootStyle.setProperty("--light-rgb", lightChannels.join(" "));
+    scrollClip.step(now);
+  }
+  function applyPaper(id) {
+    SETTINGS.paper = id;
+    const p = paper();
+    rootStyle.setProperty("--paper", p.paper);
+    rootStyle.setProperty("--ink", p.ink);
+    rootStyle.setProperty("--ink-muted", p.inkMuted);
+    rootStyle.setProperty("--ink-faint", p.inkMuted);
+    rootStyle.setProperty("--cursor", p.cursor);
+    rootStyle.setProperty("--selection", p.selection);
+    setWash();
+    const dark = p.appearance === "dark";
+    rootStyle.setProperty("--border", dark ? "rgba(230,225,234,.16)" : "rgba(42,32,25,.16)");
+    rootStyle.setProperty("--border-strong", dark ? "rgba(230,225,234,.30)" : "rgba(42,32,25,.30)");
+    rootStyle.setProperty("--gilt", dark ? "#c9a45c" : "#b08a4a");
+    rootStyle.setProperty("--gilt-text", dark ? "#e3c48a" : "#6f5420");
+    rootStyle.setProperty("--gilt-soft", dark ? "#efdfb2" : "#d9c08a");
+    rootStyle.setProperty("--accent", dark ? "#8ea8e0" : "#2f5277");
+    rootStyle.setProperty("--prose-ink", dark ? "#ded8e6" : "#241b14");
+    rootStyle.setProperty("--prose-strong", dark ? "#f2eef8" : "#1d1610");
+    rootStyle.setProperty("--ink-muted", dark ? "#9a94a6" : "#6b5f52");
+    document.body.style.color = p.ink;
+    sheetEl.style.boxShadow = dark ? "0 0 0 1px rgba(0,0,0,.5), 0 34px 70px -24px rgba(0,0,0,.9)" : "0 0 0 1px rgba(0,0,0,.18), 0 34px 70px -24px rgba(0,0,0,.75)";
+    if (studio) studio.sync();
+    updateLeaf();
+    needsBuild = true;
+    relayout();
+  }
+  function applyTheme(id) {
+    if (!THEMES[id]) return;
+    SETTINGS.theme = id;
+    const t = theme();
+    rootStyle.setProperty("--room", t.palette.room);
+    rootStyle.setProperty("--room-edge", t.palette.roomEdge);
+    rootStyle.setProperty("--gilt", t.appearance === "dark" ? "#c9a45c" : t.palette.accent);
+    rootStyle.setProperty("--gilt-soft", t.palette.accentSoft);
+    rootStyle.setProperty("--gilt-text", t.appearance === "dark" ? "#e3c48a" : "#6f5420");
+    rootStyle.setProperty("--vignette", String(t.atmosphere.vignette));
+    setWash();
+    rootStyle.setProperty("--light-rgb", toUnit(t.light.color).map((c) => Math.round(c * 255)).join(" "));
+    if (studio) studio.sync();
+    updateLeaf();
     needsLight = true;
   }
-});
-document.body.appendChild(studio.element);
-document.body.appendChild(studio.handle);
-if (window.__openStudio) {
-  studio.element.dataset.open = 'true';
-  studio.handle.setAttribute('aria-expanded', 'true');
-}
-
-const lampButton = document.getElementById('lamp-toggle');
-lampButton.addEventListener('click', () => {
-  SETTINGS.lamp = !SETTINGS.lamp;
-  lampButton.setAttribute('aria-pressed', String(SETTINGS.lamp));
-  needsLight = true;
-});
-
-/* 敲字、点击、滚动都会移动灯——灯跟着墨走，所以要重新打光。 */
-for (const type of ['input', 'keyup', 'click', 'select', 'focus']) {
-  inputEl.addEventListener(type, () => { needsLight = true; });
-}
-
-new ResizeObserver(relayout).observe(sheetEl);
-window.addEventListener('resize', relayout);
-
-lampButton.setAttribute('aria-pressed', String(SETTINGS.lamp));
-applyTheme(SETTINGS.theme);
-applyPaper(SETTINGS.paper);
-if (document.fonts && document.fonts.ready) document.fonts.ready.then(relayout);
-requestAnimationFrame(frame);
-</script>
+  function updateLeaf() {
+    const leaf = document.getElementById("sheet-where");
+    if (!leaf) return;
+    const names = {
+      "paper-and-ink": "Paper & Ink",
+      "midnight-study": "Midnight Study",
+      "moonlit-poetry": "Moonlit Poetry"
+    };
+    leaf.textContent = (names[SETTINGS.theme] || SETTINGS.theme) + " · " + paper().name;
+  }
+  var studio = null;
+  studio = buildStudio({
+    state: () => SETTINGS,
+    onChange(key, value) {
+      if (key === "preset") {
+        Object.assign(SETTINGS, JSON.parse(JSON.stringify(NOCTURNE_DEFAULTS)));
+        scrollClip.apply();
+        applyTheme(SETTINGS.theme);
+        applyPaper(SETTINGS.paper);
+        inkCaret.setMode(SETTINGS.cursorMode);
+        lampButton.setAttribute("aria-pressed", String(SETTINGS.lamp));
+        needsBuild = true;
+        needsLight = true;
+        studio.sync();
+        return;
+      }
+      if (key === "paper") {
+        applyPaper(value);
+        return;
+      }
+      if (key === "theme") {
+        applyTheme(value);
+        return;
+      }
+      if (key === "cursor") {
+        SETTINGS.cursorMode = value;
+        inkCaret.setMode(value);
+        studio.sync();
+        return;
+      }
+      if (key === "lamp") {
+        SETTINGS.lamp = value;
+        lampButton.setAttribute("aria-pressed", String(value));
+        needsLight = true;
+        return;
+      }
+      if (key === "scrollStyle" || key === "scrollFinish") {
+        SETTINGS.scrollbar[key === "scrollStyle" ? "style" : "finish"] = value;
+        scrollClip.apply();
+        studio.sync();
+        return;
+      }
+      if (key === "scrollBarWidth" || key === "scrollBarOpacity") {
+        SETTINGS.scrollbar[key === "scrollBarWidth" ? "barWidth" : "barOpacity"] = value;
+        scrollClip.apply();
+        return;
+      }
+      SETTINGS[key] = value;
+      if (key === "texture") needsBuild = true;
+      needsLight = true;
+    }
+  });
+  document.body.appendChild(studio.element);
+  document.body.appendChild(studio.handle);
+  if (window.__openStudio) {
+    studio.element.dataset.open = "true";
+    studio.handle.setAttribute("aria-expanded", "true");
+  }
+  var lampButton = document.getElementById("lamp-toggle");
+  lampButton.addEventListener("click", () => {
+    SETTINGS.lamp = !SETTINGS.lamp;
+    lampButton.setAttribute("aria-pressed", String(SETTINGS.lamp));
+    needsLight = true;
+  });
+  for (const type of ["input", "keyup", "click", "select", "focus"]) {
+    inputEl.addEventListener(type, () => {
+      needsLight = true;
+    });
+  }
+  new ResizeObserver(relayout).observe(sheetEl);
+  window.addEventListener("resize", relayout);
+  lampButton.setAttribute("aria-pressed", String(SETTINGS.lamp));
+  applyTheme(SETTINGS.theme);
+  applyPaper(SETTINGS.paper);
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(relayout);
+  requestAnimationFrame(frame);
+})();</script>
 </body>
 </html>

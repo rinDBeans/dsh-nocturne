@@ -1,23 +1,25 @@
 
-/* ═══════════════════════════════════════════════════════════════════════════
-   DSH 适配层。上面那一大段是样张里的同一份核心，由 tools/build.mjs 从
-   sample/nocturne-desk.html 里抽取——不是复制粘贴，所以纸、灯、辉光在
-   样张和宿主里永远是同一套代码。
-   ═══════════════════════════════════════════════════════════════════════ */
+/* DSH 适配层：共享渲染核心、官方设置槽、持久化、共存与生命周期。 */
+import {
+  SETTINGS, NOCTURNE_DEFAULTS, PAPERS, THEMES, CLIP_FINISHES,
+  paper, theme, washColor, surfaceColor, toUnit, buildRig, reduceMotion,
+  poolColor, PaperLight, GlowLayer, InkCaret, ScrollClip
+} from './core/index.js';
+import {createNocturneSettings} from './settings-page.js';
+import {SETTING_KEYS, isRecord} from './settings-contract.js';
+
 const PAPER_ATTR = 'data-dn';
 const STYLE_ID = 'dsh-nocturne-style';
 const STORE_KEY = 'dsh-nocturne:settings';
 const STORE_VERSION = 1;
 /** 宿主半（lib/index.js）在这个路径上读写同一个 JSON 文档。 */
 const REMOTE_PATH = '/dsh-nocturne/settings';
-const SETTING_KEYS = ['paper', 'theme', 'lamp', 'enabled', 'intensity', 'spread', 'beam', 'aim',
-  'reach', 'softness', 'grain', 'cursorGlow', 'paperIllumination', 'particles', 'texture',
-  'cursorMode', 'coexist'];
 /** 会被本插件改写、卸载时必须逐项还原的 token。 */
 const TOKEN_NAMES = ['--dsw-alias-bg-base', '--dsw-alias-bg-module-platform', '--dsw-alias-bg-layer-1',
   '--dsw-alias-bg-layer-2', '--dsw-alias-label-primary', '--dsw-alias-label-secondary',
   '--dsw-alias-label-tertiary', '--dn-paper', '--dn-ink', '--dn-caret-ink', '--dn-light-rgb',
-  '--dn-metal-lo', '--dn-metal-hi', '--dn-metal', '--dn-sheet', '--dn-selection'];
+  '--dn-metal-lo', '--dn-metal-hi', '--dn-metal', '--dn-sheet', '--dn-selection',
+  '--dsh-font-family-text', '--dsh-font-family-code'];
 /** 宿主/别家皮肤在 body 上定义的组件表面：气泡、输入框、菜单、选择器、侧栏。 */
 const SURFACE_NAMES = ['--dsw-specific-bubble', '--dsw-specific-input-major', '--dsw-specific-menu',
   '--dsw-specific-selector', '--dsw-specific-sidebar-fill'];
@@ -39,6 +41,7 @@ let selfCheckError = '';
 const measure = document.createElement('canvas').getContext('2d');
 
 let teardown = null;
+let settingsPageComponent = null;
 
 /**
  * 读设置。带版本号：旧版本写进去的键可能已经不认了，所以认不出的值一律回落默认，
@@ -46,32 +49,60 @@ let teardown = null;
  */
 /** 把一份存下来的设置并进来。白名单外的一律不认，脏值也挡在门外。 */
 function mergeSettings(saved) {
-  if (!saved || typeof saved !== 'object') return;
+  if (!isRecord(saved)) return;
   for (const key of SETTING_KEYS) {
     if (saved[key] !== undefined && saved[key] !== null) SETTINGS[key] = saved[key];
   }
-  if (saved.window && typeof saved.window === 'object') Object.assign(SETTINGS.window, saved.window);
+  if (isRecord(saved.window)) Object.assign(SETTINGS.window, saved.window);
   // 嵌套对象要并进来而不是整块替换：老版本存下的文档里没有这几个键。
-  if (saved.scrollbar && typeof saved.scrollbar === 'object') Object.assign(SETTINGS.scrollbar, saved.scrollbar);
+  if (isRecord(saved.scrollbar)) Object.assign(SETTINGS.scrollbar, saved.scrollbar);
 }
 
+function boundedNumber(value, fallback, min, max, integer = false) {
+  const number = typeof value === 'number' ? value : NaN;
+  const safe = Number.isFinite(number) ? Math.min(max, Math.max(min, number)) : fallback;
+  return integer ? Math.round(safe) : safe;
+}
 function normalize() {
-  if (!PAPERS[SETTINGS.paper]) SETTINGS.paper = 'parchment';
-  if (!THEMES[SETTINGS.theme]) SETTINGS.theme = 'paper-and-ink';
-  if (['ink', 'quill', 'none'].indexOf(SETTINGS.cursorMode) < 0) SETTINGS.cursorMode = 'ink';
-  if (['auto', 'material', 'full'].indexOf(SETTINGS.coexist) < 0) SETTINGS.coexist = 'auto';
+  const defaults = NOCTURNE_DEFAULTS;
+  if (!PAPERS[SETTINGS.paper]) SETTINGS.paper = defaults.paper;
+  if (!THEMES[SETTINGS.theme]) SETTINGS.theme = defaults.theme;
+  if (['ink', 'quill', 'none'].indexOf(SETTINGS.cursorMode) < 0) SETTINGS.cursorMode = defaults.cursorMode;
+  if (['auto', 'material', 'full'].indexOf(SETTINGS.coexist) < 0) SETTINGS.coexist = defaults.coexist;
+  if (['pointed', 'soft'].indexOf(SETTINGS.beam) < 0) SETTINGS.beam = defaults.beam;
+  for (const key of ['lamp', 'enabled', 'diagnostics', 'ambientMotion']) {
+    if (typeof SETTINGS[key] !== 'boolean') SETTINGS[key] = defaults[key];
+  }
+  const limits = {
+    intensity: [0, 2], spread: [20, 160], aim: [-1, 1], reach: [0.1, 3],
+    softness: [0, 1], bloom: [0, 1], grain: [0, 1], cursorGlow: [0, 1],
+    paperIllumination: [0, 1], particles: [0, 1], texture: [0, 1.6]
+  };
+  for (const [key, range] of Object.entries(limits)) {
+    SETTINGS[key] = boundedNumber(SETTINGS[key], defaults[key], range[0], range[1]);
+  }
+  if (!isRecord(SETTINGS.scrollbar)) SETTINGS.scrollbar = {...defaults.scrollbar};
   const bar = SETTINGS.scrollbar;
-  if (['clip', 'bar', 'native'].indexOf(bar.style) < 0) bar.style = 'clip';
-  if (!CLIP_FINISHES[bar.finish]) bar.finish = 'silver';
-  bar.barWidth = Math.min(14, Math.max(3, Number(bar.barWidth) || 6));
-  bar.barOpacity = Math.min(1, Math.max(0.1, Number(bar.barOpacity) || 0.45));
+  if (['clip', 'bar', 'native'].indexOf(bar.style) < 0) bar.style = defaults.scrollbar.style;
+  if (!CLIP_FINISHES[bar.finish]) bar.finish = defaults.scrollbar.finish;
+  bar.barWidth = boundedNumber(bar.barWidth, defaults.scrollbar.barWidth, 3, 14);
+  bar.barOpacity = boundedNumber(bar.barOpacity, defaults.scrollbar.barOpacity, 0.1, 1);
+  if (!isRecord(SETTINGS.window)) SETTINGS.window = {...defaults.window};
+  const win = SETTINGS.window;
+  const windowDefaults = defaults.window;
+  win.x = boundedNumber(win.x, windowDefaults.x, 0, 1);
+  win.y = boundedNumber(win.y, windowDefaults.y, 0, 1);
+  win.columns = boundedNumber(win.columns, windowDefaults.columns, 1, 6, true);
+  win.rows = boundedNumber(win.rows, windowDefaults.rows, 1, 8, true);
+  win.softness = boundedNumber(win.softness, windowDefaults.softness, 0, 1);
+  win.slant = boundedNumber(win.slant, windowDefaults.slant, -1, 1);
 }
 
 function snapshot() {
   const saved = {v: STORE_VERSION};
   for (const key of SETTING_KEYS) saved[key] = SETTINGS[key];
-  saved.window = SETTINGS.window;
-  saved.scrollbar = SETTINGS.scrollbar;
+  saved.window = {...SETTINGS.window};
+  saved.scrollbar = {...SETTINGS.scrollbar};
   // 自检记录：桌面版每次启动端口都变，我拿不到界面，只能让客户端自己报一次状态。
   // 键名带下划线，mergeSettings 的白名单不会把它吃回设置。
   if (lastDiag) saved.__diag = lastDiag;
@@ -208,6 +239,7 @@ function watchWhite() {
     return node.tagName.toLowerCase() + (cls ? '.' + cls : '');
   };
   const record = (node) => {
+    if (!SETTINGS.diagnostics) return;
     // 整场最多记 40 次，只留最近 12 条：流式输出时新节点很多，不能无限记账。
     if (node.nodeType !== 1 || total >= 40) return;
     const style = getComputedStyle(node);
@@ -252,6 +284,7 @@ function watchWhite() {
     }
   };
   const observer = new MutationObserver((records) => {
+    if (!SETTINGS.diagnostics) return;
     for (const mutation of records) {
       for (const node of mutation.addedNodes) scan(node);
     }
@@ -406,6 +439,8 @@ function tokenMap(p) {
     '--dn-sheet': p.paper,
     // 选区底色：纸自己的调子（浅色纸取描金，深色纸取月白）
     '--dn-selection': washColor(),
+    '--dsh-font-family-text': '"EB Garamond", "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, "Source Han Serif SC", "Songti SC", "Noto Serif CJK SC", serif',
+    '--dsh-font-family-code': '"Courier Prime", "IBM Plex Mono", "Courier New", "DejaVu Sans Mono", ui-monospace, monospace',
 
   };
 }
@@ -416,48 +451,74 @@ function tokenMap(p) {
  * 只写根元素的话会被它自己的声明盖住（继承输给本地声明）。
  * 气泡不该是浮在纸上的白卡片——它就是纸上压出来的一层。
  */
+/**
+ * 只回滚自己写入的内联样式。首次覆盖前记录原值与优先级；若别家后来改过，
+ * 当前值不再等于我们的写入值，就不抢回去。material 与 full 切换也走同一套恢复。
+ */
+const ownedStyles = new Map();
+function ownedStyleKey(element, name) {
+  return (element === document.documentElement ? 'root:' : 'body:') + name;
+}
+function setOwnedStyle(element, name, value, priority = '') {
+  const key = ownedStyleKey(element, name);
+  let owned = ownedStyles.get(key);
+  if (!owned) {
+    owned = {
+      element, name,
+      valueBefore: element.style.getPropertyValue(name),
+      priorityBefore: element.style.getPropertyPriority(name)
+    };
+    ownedStyles.set(key, owned);
+  }
+  const text = String(value);
+  element.style.setProperty(name, text, priority);
+  owned.valueWritten = text;
+  owned.priorityWritten = priority;
+}
+function restoreOwnedStyles(includeLight = true) {
+  for (const [key, owned] of ownedStyles) {
+    if (!includeLight && owned.name === '--dn-light-rgb') continue;
+    const style = owned.element.style;
+    if (style.getPropertyValue(owned.name) === owned.valueWritten
+      && style.getPropertyPriority(owned.name) === owned.priorityWritten) {
+      if (owned.valueBefore) style.setProperty(owned.name, owned.valueBefore, owned.priorityBefore);
+      else style.removeProperty(owned.name);
+    }
+    ownedStyles.delete(key);
+  }
+}
+
 function applySurfaces() {
   const body = document.body;
   if (!body) return;
   for (const name of SURFACE_NAMES) {
-    body.style.setProperty(name, surfaceColor(SURFACE_MIX[name]), 'important');
+    setOwnedStyle(body, name, surfaceColor(SURFACE_MIX[name]), 'important');
   }
-}
-
-function clearSurfaces() {
-  const body = document.body;
-  if (!body) return;
-  for (const name of SURFACE_NAMES) body.style.removeProperty(name);
-}
-
-function clearTokens() {
-  for (const name of TOKEN_NAMES) document.documentElement.style.removeProperty(name);
 }
 
 function applyTokens() {
-  applySurfaces();
-  // 「只叠材质」：一个宿主配色 token 都不碰，只留纸与灯——两套皮肤可以叠着用。
+  // 先撤掉上一模式的覆盖；光照变量独立连续，不因换纸而闪一下。
+  restoreOwnedStyles(false);
+  const root = document.documentElement;
+  const p = paper();
+  // 「只叠材质」：宿主 alias 与 specific 一概不写，只保留自己的 dn-*。
   if (tokenMode() === 'material') {
-    clearTokens();
-    const p = paper();
-    const root = document.documentElement.style;
-    root.setProperty('--dn-sheet', 'transparent');
-    root.setProperty('--dn-selection', washColor());
-    for (const name of ['--dn-paper', '--dn-ink', '--dn-caret-ink', '--dn-metal-lo', '--dn-metal-hi', '--dn-metal']) {
-      root.setProperty(name, {
-        '--dn-paper': p.paper,
-        '--dn-ink': p.ink,
-        '--dn-caret-ink': p.cursor,
-        '--dn-metal-lo': '#5e431c',
-        '--dn-metal-hi': '#f3dca4',
-        '--dn-metal': '#b8904c'
-      }[name]);
-    }
+    const own = {
+      '--dn-sheet': 'transparent',
+      '--dn-selection': washColor(),
+      '--dn-paper': p.paper,
+      '--dn-ink': p.ink,
+      '--dn-caret-ink': p.cursor,
+      '--dn-metal-lo': '#5e431c',
+      '--dn-metal-hi': '#f3dca4',
+      '--dn-metal': '#b8904c'
+    };
+    for (const [name, value] of Object.entries(own)) setOwnedStyle(root, name, value);
     return;
   }
-  const root = document.documentElement.style;
-  const map = tokenMap(paper());
-  for (const name of Object.keys(map)) root.setProperty(name, map[name], 'important');
+  applySurfaces();
+  const map = tokenMap(p);
+  for (const [name, value] of Object.entries(map)) setOwnedStyle(root, name, value, 'important');
 }
 
 function injectStyle() {
@@ -508,16 +569,19 @@ function mount() {
   let stopped = false;
 
   function measureSheet() {
-    const dpr = Math.min(2, window.devicePixelRatio || 1);
     const width = Math.max(1, Math.round(window.innerWidth));
     const height = Math.max(1, Math.round(window.innerHeight));
+    // 限制两片全屏画布的总像素成本；DOM 文字仍按系统 DPR 清晰渲染。
+    // 预留取整余量，确保最终画布不超过约 200 万像素。
+    const pixelBudgetDpr = Math.sqrt(1950000 / (width * height));
+    const dpr = Math.max(0.5, Math.min(2, window.devicePixelRatio || 1, pixelBudgetDpr));
     for (const canvas of [paperCanvas, glowCanvas]) {
       canvas.style.width = width + 'px';
       canvas.style.height = height + 'px';
     }
     glow.resize(width, height, dpr);
-    const changed = width !== size.width || height !== size.height;
-    size = {width, height};
+    const changed = width !== size.width || height !== size.height || dpr !== size.pixelRatio;
+    size = {width, height, pixelRatio: dpr};
     origin = {left: 0, top: 0};
     if (changed || needsBuild) {
       paperLight.build({width, height, pixelRatio: dpr, p: paper()});
@@ -534,6 +598,7 @@ function mount() {
   let rebuiltThisFrame = false;
   let lastCaretPoint = null;
   let cursorMovedThisFrame = false;
+  let thisFrameActive = false;
 
   function paintFrame(now) {
     const startedAt = performance.now();
@@ -544,7 +609,7 @@ function mount() {
     caretPoint = caret.sync() || findCaret();
     const caretSheetX = caretPoint ? caretPoint.x - origin.left : size.width / 2;
     const rig = buildRig(size, caretSheetX);
-    const animateGrain = SETTINGS.grain > 0 && !reduceMotion;
+    const animateGrain = SETTINGS.ambientMotion && SETTINGS.grain > 0 && !reduceMotion;
 
     let lightFrameRan = false;
     if (needsLight || (animateGrain && now - lastLightAt > 120)) {
@@ -567,7 +632,7 @@ function mount() {
     const caretMoved = caretPoint && lastCaretPoint &&
       (Math.abs(caretPoint.x - lastCaretPoint.x) > 0.5 || Math.abs(caretPoint.y - lastCaretPoint.y) > 0.5);
     const caretAppeared = Boolean(caretPoint) !== Boolean(lastCaretPoint);
-    const dustDue = SETTINGS.particles > 0 && now - lastGlowAt > 60;
+    const dustDue = SETTINGS.ambientMotion && !reduceMotion && SETTINGS.particles > 0 && now - lastGlowAt > 60;
     if (lightFrameRan || caretMoved || caretAppeared || dustDue) {
       glow.render({
         rig,
@@ -579,7 +644,7 @@ function mount() {
         particles: SETTINGS.particles,
         cursorGlow: SETTINGS.cursorGlow,
         cursor: caretPoint ? {x: caretPoint.x - origin.left, y: caretPoint.y - origin.top} : null,
-        time
+        time: SETTINGS.ambientMotion && !reduceMotion ? time : 0
       });
       lastGlowAt = now;
     }
@@ -587,12 +652,13 @@ function mount() {
     cursorMovedThisFrame = false;
 
     // 纸夹自带脏标记：静止时只花一次比较。
-    scrollClip.step(now);
+    const scrollMoving = scrollClip.step(now);
+    thisFrameActive = (SETTINGS.ambientMotion && (SETTINGS.grain > 0 || SETTINGS.particles > 0)) || scrollMoving;
 
     // 根元素的 custom property 一改，整篇文档的样式都要重算——只在真的变了才写。
     const rgb = lightChannels.join(' ');
     if (rgb !== lastRgbWritten) {
-      document.documentElement.style.setProperty('--dn-light-rgb', rgb);
+      setOwnedStyle(document.documentElement, '--dn-light-rgb', rgb);
       lastRgbWritten = rgb;
     }
 
@@ -601,7 +667,7 @@ function mount() {
     const cost = performance.now() - startedAt;
     if (lastFrameAt) {
       const gap = now - lastFrameAt;
-      if (gap > 200) {
+      if (SETTINGS.diagnostics && gap > 200) {
         hangs.push({
           at: new Date().toISOString().slice(11, 23),
           gap: Math.round(gap),
@@ -624,20 +690,27 @@ function mount() {
    * 之前 reportDiag 里一处抛错就把整个循环带走（纸停在最后一帧、自检也再没写过），
    * 桌面版又没有控制台，所以这里把错误存进 selfCheckError，随自检落盘。
    */
+  let lastPaintAt = 0;
   function frame(now) {
     if (stopped) return;
-    try {
-      paintFrame(now);
-    } catch (error) {
-      if (!selfCheckError) {
-        selfCheckError = String((error && error.stack) || error).slice(0, 240);
-        if (lastDiag) { lastDiag.error = selfCheckError; persist(); }
+    const interval = thisFrameActive && !reduceMotion ? 1000 / 30 : 1000 / 8;
+    if (now - lastPaintAt >= interval) {
+      lastPaintAt = now;
+      try {
+        paintFrame(now);
+      } catch (error) {
+        if (!selfCheckError) {
+          selfCheckError = String((error && error.stack) || error).slice(0, 240);
+          if (lastDiag) lastDiag.error = selfCheckError;
+          persist();
+        }
       }
     }
     frameId = requestAnimationFrame(frame);
   }
 
   function reposition() {
+    lastPaintAt = 0;
     measureSheet();
     needsLight = true;
   }
@@ -651,14 +724,18 @@ function mount() {
     if (document.hidden) {
       if (frameId) { cancelAnimationFrame(frameId); frameId = 0; }
     } else if (!frameId && !stopped) {
+      lastPaintAt = 0;
       needsLight = true;
       frameId = requestAnimationFrame(frame);
     }
   };
   // 显卡被回收（切后台、驱动重置、显存吃紧）时不能白屏：重建 surface 再点灯。
-  const onContextLost = (event) => { event.preventDefault(); };
+  const onContextLost = (event) => {
+    event.preventDefault();
+    paperLight.invalidate();
+  };
   const onContextRestored = () => {
-    paperLight.state = paperLight.gl ? 'ready' : 'failed';
+    paperLight.restore();
     needsBuild = true;
     needsLight = true;
     measureSheet();
@@ -675,7 +752,7 @@ function mount() {
    * 不做常驻轮询——一次全表 getComputedStyle 是几十毫秒。
    */
   const onKeyForAudit = (event) => {
-    if (event.key !== 'Enter' || event.shiftKey) return;
+    if (!SETTINGS.diagnostics || event.key !== 'Enter' || event.shiftKey) return;
     white.arm();
     setTimeout(() => {
       try {
@@ -733,7 +810,7 @@ function mount() {
     }
   }
 
-  function reportDiag() {
+  function reportDiag(includePixels = false) {
     let renderer = '';
     let webgl2 = false;
     try {
@@ -782,89 +859,66 @@ function mount() {
       papers: Object.keys(PAPERS).length,
       themes: Object.keys(THEMES).length,
       // 与标定基准同口径：上游参考值 p50≈115 / p95≈178（1440×900、parchment、balanced 灯）
-      paperPixels: samplePaper()
+      paperPixels: includePixels || SETTINGS.diagnostics ? samplePaper() : null
     };
     persist();
   }
 
-  // 缮写室：与样张同一份 builder，所以两处的面板不会长歪。
-  const studio = buildStudio({
+  /**
+   * 面板与控制台唯一的设置入口：先合并/规范化，再统一执行副作用。
+   * 新增设置时不再靠记住"哪个分支还要刷 token、哪个分支还要重建纸"。
+   */
+  const settingsListeners = new Set();
+  let settingsRevision = 0;
+  function notifySettings() {
+    settingsRevision += 1;
+    for (const listener of settingsListeners) listener();
+  }
+  function updateSettings(patch, reset = false) {
+    const keys = new Set(reset ? [...SETTING_KEYS, 'window', 'scrollbar'] : Object.keys(patch || {}));
+    if (reset) Object.assign(SETTINGS, JSON.parse(JSON.stringify(NOCTURNE_DEFAULTS)));
+    else mergeSettings(patch);
+    normalize();
+    lastPaintAt = 0;
+    const changed = (...names) => reset || names.some((name) => keys.has(name));
+
+    if (changed('paper', 'theme', 'coexist')) applyTokens();
+    if (changed('cursorMode')) caret.setMode(SETTINGS.cursorMode);
+    if (changed('scrollbar')) scrollClip.apply();
+    if (changed('paper')) caret.hide();
+    needsLight = true;
+    if (changed('paper', 'theme', 'texture')) {
+      needsBuild = true;
+      reposition();
+    }
+    notifySettings();
+    persist();
+  }
+
+  // 官方设置槽使用同一个 React 快照；不再创建上游悬浮 Studio。
+  settingsPageComponent = createNocturneSettings({
     state: () => SETTINGS,
     foreign: foreignSkin,
     resolvedCoexist: tokenMode,
+    revision: () => settingsRevision,
+    subscribe(listener) {
+      settingsListeners.add(listener);
+      return () => settingsListeners.delete(listener);
+    },
     onChange(key, value) {
-      if (key === 'preset') {
-        // 标定值：与样张同一份 NOCTURNE_DEFAULTS，两边不会各有一组"默认"。
-        Object.assign(SETTINGS, JSON.parse(JSON.stringify(NOCTURNE_DEFAULTS)));
-        caret.setMode(SETTINGS.cursorMode);
-        scrollClip.apply();
-        applyTokens();
-        studio.sync();
-        persist();
-        needsBuild = true;
-        reposition();
-        return;
-      }
-      if (key === 'coexist') {
-        SETTINGS.coexist = value;
-        studio.sync();
-        persist();
-        return;
-      }
-      if (key === 'paper') {
-        SETTINGS.paper = value;
-        applyTokens();
-        needsBuild = true;
-        caret.hide();
-        studio.sync();
-        persist();
-        reposition();
-        return;
-      }
-      if (key === 'theme') {
-        SETTINGS.theme = value;
-        // 选区底色取自房间，换房要重写一遍 token。
-        applyTokens();
-        needsBuild = true;
-        studio.sync();
-        persist();
-        reposition();
-        return;
-      }
-      if (key === 'cursor') {
-        SETTINGS.cursorMode = value;
-        caret.setMode(value);
-        studio.sync();
-        persist();
-        return;
-      }
-      if (key === 'lamp') {
-        SETTINGS.lamp = value;
-        needsLight = true;
-        persist();
-        return;
-      }
+      if (key === 'preset') { updateSettings(null, true); return; }
+      if (key === 'cursor') { updateSettings({cursorMode: value}); return; }
       if (key === 'scrollStyle' || key === 'scrollFinish') {
-        SETTINGS.scrollbar[key === 'scrollStyle' ? 'style' : 'finish'] = value;
-        scrollClip.apply();
-        studio.sync();
-        persist();
+        updateSettings({scrollbar: {[key === 'scrollStyle' ? 'style' : 'finish']: value}});
         return;
       }
       if (key === 'scrollBarWidth' || key === 'scrollBarOpacity') {
-        SETTINGS.scrollbar[key === 'scrollBarWidth' ? 'barWidth' : 'barOpacity'] = value;
-        scrollClip.apply();
-        persist();
+        updateSettings({scrollbar: {[key === 'scrollBarWidth' ? 'barWidth' : 'barOpacity']: value}});
         return;
       }
-      SETTINGS[key] = value;
-      if (key === 'texture') needsBuild = true;
-      needsLight = true;
-      persist();
+      updateSettings({[key]: value});
     }
   });
-  document.body.appendChild(studio.element);
-  document.body.appendChild(studio.handle);
   caret.setMode(SETTINGS.cursorMode);
   scrollClip.apply();
   applyTokens();
@@ -875,7 +929,7 @@ function mount() {
     caret.setMode(SETTINGS.cursorMode);
     scrollClip.apply();
     applyTokens();
-    studio.sync();
+    notifySettings();
     needsBuild = true;
     reposition();
   });
@@ -884,42 +938,39 @@ function mount() {
     settings: SETTINGS,
     papers: Object.keys(PAPERS),
     use(paperId, options) {
-      if (PAPERS[paperId]) SETTINGS.paper = paperId;
-      if (options) Object.assign(SETTINGS, options);
-      persist();
-      needsBuild = true;
-      reposition();
+      const patch = Object.assign({}, options || {});
+      if (PAPERS[paperId]) patch.paper = paperId;
+      updateSettings(patch);
       return SETTINGS.paper;
     },
     theme(themeId) {
-      if (THEMES[themeId]) SETTINGS.theme = themeId;
-      persist();
-      needsBuild = true;
-      reposition();
+      if (THEMES[themeId]) updateSettings({theme: themeId});
       return SETTINGS.theme;
     },
-    lamp(on) { SETTINGS.lamp = on !== false; persist(); needsLight = true; },
+    lamp(on) { updateSettings({lamp: on !== false}); },
+    /** 默认只保留轻量自检；开启后才扫描 DOM、记录卡顿并自动采样 GPU。 */
+    diagnostics(on) { updateSettings({diagnostics: on !== false}); },
     /** 关掉墨迹光标：宿主自己的光标立刻回来（caret-color 会被还原）。 */
     caret(on) { caret.enabled = on !== false; if (!caret.enabled) caret.hide(); return caret.enabled; },
     /** 滚条形态：'clip' 纸夹 / 'bar' 细杆 / 'native' 原生。 */
     scroll(style) {
-      SETTINGS.scrollbar.style = ['clip', 'bar', 'native'].indexOf(style) < 0 ? 'clip' : style;
-      scrollClip.apply();
-      studio.sync();
-      persist();
+      const next = ['clip', 'bar', 'native'].indexOf(style) < 0 ? 'clip' : style;
+      updateSettings({scrollbar: {style: next}});
       return SETTINGS.scrollbar.style;
     },
     /** 选区与纸夹的实时状态：桌面版没有控制台，这是唯一能问的地方。 */
     state() {
       return {
         clip: scrollClip.element ? scrollClip.element.style.transform : null,
-        target: scrollClip.target ? String(scrollClip.target.className).slice(0, 40) : null
+        target: scrollClip.target ? String(scrollClip.target.className).slice(0, 40) : null,
+        dirty: scrollClip.needLayout,
+        observed: Boolean(scrollClip.mutationObserver)
       };
     },
     /** 马上写一次自检（含白面探针的结果）——桌面版没有控制台，这是唯一的取证入口。 */
     diag() {
       try {
-        reportDiag();
+        reportDiag(true);
       } catch (error) {
         return {error: String(error).slice(0, 200)};
       }
@@ -973,18 +1024,17 @@ function mount() {
     white.observer.disconnect();
     caret.destroy();
     scrollClip.destroy();
-    paperLight.release();
+    paperLight.destroy();
     glow.clear();
-    if (studio.element.parentNode) studio.element.remove();
-    if (studio.handle.parentNode) studio.handle.remove();
+    settingsPageComponent = null;
+    settingsListeners.clear();
     if (paperCanvas.parentNode) paperCanvas.remove();
     if (glowCanvas.parentNode) glowCanvas.remove();
     const style = document.getElementById(STYLE_ID);
     if (style) style.remove();
-    // token 还原：撤掉内联覆盖，宿主的主题立刻回来。
+    // 只还原仍由本插件持有的内联覆盖，别家后续的修改不受影响。
     clearTimeout(remoteTimer);
-    for (const name of TOKEN_NAMES) document.documentElement.style.removeProperty(name);
-    clearSurfaces();
+    restoreOwnedStyles();
     delete window.__dshNocturne;
   };
 }
@@ -993,16 +1043,31 @@ function unmount() {
   if (teardown) { const run = teardown; teardown = null; run(); }
 }
 
-exports.name = 'dsh-nocturne';
-exports.inject = [];
+function registerSettingsPage(ctx) {
+  if (!ctx || !ctx.slots || !settingsPageComponent) return;
+  return ctx.slots.inject('settings.section', () => ctx.slots.register({
+    name: 'settings.section',
+    id: 'nocturne',
+    order: 24,
+    label: () => '缮写室'
+  }, settingsPageComponent));
+}
+
+export const name = 'dsh-nocturne';
+export const inject = ['slots'];
 /**
  * 宿主调用一次就能挂上；返回值是 cordis 认的卸载函数。
  * 重复调用是无害的：mount() 先看 canvas 是否已经在场。
  */
-exports.apply = () => {
+export function apply(ctx) {
   mount();
+  if (ctx && typeof ctx.effect === 'function') {
+    ctx.effect(() => registerSettingsPage(ctx), 'dsh-nocturne: settings section');
+  } else {
+    registerSettingsPage(ctx);
+  }
   return unmount;
-};
+}
 
 if (document.readyState === 'loading') {
   document.addEventListener('DOMContentLoaded', () => {

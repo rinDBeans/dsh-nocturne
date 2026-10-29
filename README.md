@@ -1,85 +1,152 @@
 # dsh-nocturne · 缮写室
 
-把 [Typewriter Nocturne](https://github.com/Chaosnap/Typewriter-Nocturne)（MIT）的**纸、灯与墨**
-搬进 DeepSeek Harness 的浏览器界面。**不含拟物打字机**。
+> DeepSeek Harness 的 WebGL2 古典纸张与物理光影主题插件。
 
-不是换配色，是换渲染管线：一张由 WebGL2 着色器算出来的纸，以 `multiply` 盖在界面之上，
-所以每一行字都被同一盏灯照着。
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![DeepSeek Harness](https://img.shields.io/badge/DSH-0.2.x-orange.svg)]()
+[![Node](https://img.shields.io/badge/Node.js-18%2B-green.svg)]()
+[![WebGL2](https://img.shields.io/badge/Renderer-WebGL2-teal.svg)]()
 
-滚动条也是搬过来的：**一枚夹在纸缘上的回形针**，跟着滚动走弹簧、移动时微微歪一下，可以拖着卷。
+它不是简单的 CSS 调色板覆盖，也不是一张静态贴图，而是把一盏桌前台灯与带纤维肌理的纸张引入了 DeepSeek Harness。
 
-选区的动效（上游的"墨滴化开"）**没有移植**——它需要盖住系统自己的选区，两者会打架，
-得不偿失。选区只换了颜色——纸自己的调子（浅色纸取描金、深色纸取月白），
-拖动、双击选词、复制粘贴全归浏览器。
+项目移植自 [Typewriter Nocturne](https://github.com/Chaosnap/Typewriter-Nocturne) 的光学与材质渲染管线，剥离了拟物打字机外壳，专注于日常舒适的阅读与书写。纸面纤维与漫射光影由 WebGL2 着色器实时演算，以 `mix-blend-mode: multiply` 叠在文字之上；所有的文本排版、滚动物理与会话交互仍完整交给 DSH 原生处理。
 
-![纸与灯](docs/previews/nocturne-parchment.png)
+![缮写室主视觉](docs/previews/nocturne-hero.png)
 
-## 里面有什么
+---
 
-| 路径 | 是什么 |
-| --- | --- |
-| `sample/nocturne-desk.html` | 单文件样张，**渲染真源**。字体已本地化，零外链 |
-| `sample/fonts/` | EB Garamond / Cormorant / Courier Prime（OFL） |
-| `packages/dsh-nocturne/` | DSH 客户端插件；`lib/client.js` 由构建脚本从样张抽取 |
-| `docs/nocturne.md` | 移植对照、三处有意改动、对齐数据、踩过的坑 |
-| `docs/previews/` | 六张纸对照、1:1 纸纹、光标、面板、与上游并排图 |
+## 纸张与空间
 
-## 看
+材质与光照彼此解耦，支持 **6 款纸张 × 3 组空间**（共 18 种光学组合）。每种搭配均经过针对性调校，确保正文对比度舒适耐读。
 
-直接用浏览器打开样张（`file://` 也能跑）：
+- **纸张材质**：
+  - **葱皮纸 (Onionskin)**：轻薄韧挺，几近无皱，还原经典洋葱纸的通透质感。
+  - **棉浆纸 (Cotton)**：冷压水彩纸手感，圆润毡压纸齿间夹杂着零星长纤维。
+  - **帘纹纸 (Laid)**：呈现古法抄纸特有的横向帘线与纵向链线肌理。
+  - **亚麻纸 (Linen)**：微密交织的经纬布纹与天然亚麻竹节感。
+  - **羊皮纸 (Parchment)**：富有做旧沉淀的微瑕云斑、水渍与边缘浸痕。
+  - **夜纸 (Night)**：为暗光环境定制的深色纸底，搭配柔和月白墨色，护眼耐读。
 
-```
+- **空间与光影**：
+  - **Paper & Ink**：字锤便携小灯，聚拢聚焦，背景深沉古朴。
+  - **Midnight Study**：深夜书斋暖调台灯，温润宽阔的光锥笼罩桌面。
+  - **Moonlit Poetry**：自轩窗倾泻而下的清冷漫射月光，静谧舒展。
+
+![6 种纸张与 3 个房间](docs/previews/papers-matrix.png)
+
+> [查看全部 18 张独立效果图 →](docs/previews/gallery/)
+
+---
+
+## 交互细节与原生保护
+
+视觉增强服务于文字，绝不牺牲基础输入体验。所有动态效果均内置严谨的原生避让与降级逻辑：
+
+| 墨迹光标 (Ink Caret) | 羽毛笔光标 (Quill Caret) |
+| :---: | :---: |
+| ![墨迹光标](docs/previews/ink-cursor.png) | ![羽毛笔光标](docs/previews/quill-cursor.png) |
+
+- **光标跟随与输入法避让**：提供「墨迹」与「羽毛笔」两款定制光标，紧随输入落点。中文输入法（IME）组合输入中、鼠标划词拖选或坐标测量异常时，**毫秒级自动退回系统原生光标**，杜绝候选框遮挡或打字跳闪。
+- **纸夹滚动条**：右侧滚动条模拟为别在纸缘的回形针（支持银、黄铜、金、黑四种质地），随滚动伴随细微的物理倾角与弹簧回弹。**滚动物理与滑动惯性完全保留原生浏览器行为**。
+- **漫射微光与无障碍**：光锥内的微弱尘埃粒子与光晕仅占用极低算力，且**严格遵循系统的「减少动态效果」（`prefers-reduced-motion`）设置**，开启后自动冻结动画粒子。
+- **硬件降级保障**：在无 WebGL2 支持或显卡驱动崩溃等环境中，自动退回平滑静态纸色，确保核心交互与文字可读性不中断。
+
+---
+
+## 原生设置集成
+
+插件无缝嵌入 DSH 官方设置体系。打开 **设置 → 缮写室**，即可直接调整全部视觉项：
+
+![DSH 原生设置页](docs/previews/nocturne-settings-native.png)
+
+- **复用宿主 React**：直接接入官方设置槽，零二次注入运行时，布局风格与 DSH 及 `claude-style` 保持统一。
+- **参数即调即显**：纸张切换、台灯开关、光照强度、光锥广角、颗粒与尘埃微调均即时响应并自动保存。
+- **桌面端设置可靠持久化**：针对 DSH 桌面端随机端口导致 `localStorage` 容易失效的问题，内置本地文件存储机制（`$DSH_HOME/cache/dsh-nocturne/settings.json`），同时向后兼容 Web 端的浏览器缓存回退。
+- **皮肤共存策略**：与第三方主题（如 `dsh-claude-style`）并存时，可在设置中选择「自动适配」、「仅叠纸张材质（保留其配色）」或「完全接管配色」。
+
+---
+
+## 免安装离线预览
+
+无需启动服务或安装插件，直接用浏览器打开内置的单文件样张即可预览全套视觉效果（英文字体均已本地化）：
+
+```text
 sample/nocturne-desk.html
-  ?paper=cotton&theme=moonlit-poetry      # 换纸 / 换房间
-  ?studio=1                               # 打开缮写室
-  ?cursor=quill&caret=继续写什么&caretAt=3  # 羽毛笔光标
-  ?lamp=0                                 # 关灯
 ```
 
-## 桌面版
+支持通过 URL 参数直接查看指定组合：
 
-DSH 桌面版每次启动端口随机，GUI origin 每次都变，`localStorage` 会失效。
-所以这个插件带**宿主半**：设置在 `$DSH_HOME/cache/dsh-nocturne/settings.json`，
-客户端启动时取回来（取不到才用本地缓存）。桌面版与 web 版共用同一份浏览器代码。
+```text
+?paper=cotton&theme=moonlit-poetry     # 棉浆纸 + 月光主题
+?studio=1&cursor=quill                 # 羽毛笔光标与调参台
+?lamp=0                                # 熄灭台灯，仅看纸纹
+```
 
-## 与 dsh-claude-style 共存
+---
 
-装了两套皮肤时，默认「自动」：探测到 claude-style 在覆盖同一批配色 token，就让位成
-**只叠材质**——保留它的配色与形状，只把纸与灯叠上去。想让它接管配色，在缮写室里把「共存」
-切成「接管配色」（内联 `!important`，优先级更高）。
+## 安装与卸载
 
-## 缮写室（设置页）
+### 前提条件
 
-右下角把手打开的面板，每一项都直通渲染参数，改完即见：
+- DeepSeek Harness `0.2.x`
+- Node.js `18.0` 或更高版本
 
-| 组 | 内容 |
-| --- | --- |
-| 房间 / 纸 | 三间房 × 六张纸，正交组合 |
-| 灯 | 开关、灯强、光锥、柔边、胶片颗粒、光里尘埃、纸纹深度 |
-| 光标 | 墨迹 / 羽毛 / 原生 |
-| 滚条 | 纸夹（银 / 黄铜 / 金 / 黑）/ 细杆（宽、不透明度）/ 原生 |
-| 共存 | 自动 / 只叠材质 / 接管配色 |
-
-## 装进 DSH
+### 安装
 
 ```bash
 cd packages/dsh-nocturne
-node install.cjs --dry-run   # 先看要改哪两处
-node install.cjs             # 装进 desktop 档案（--profile web 可换）
-# 重启 DSH
-node install.cjs --revert    # 撤
+
+# 预检安装变更
+node install.cjs --dry-run
+
+# 执行正式安装（写入桌面版档案，支持通过 --profile web 切换）
+node install.cjs
 ```
 
-装好后右下角有「缮写室」把手。
+安装完成后**重启 DSH**，即可在「设置 → 缮写室」中看到配置面板。
 
-## 改渲染
-
-渲染核心只在样张里维护一份。改完重新生成插件：
+### 卸载
 
 ```bash
-cd packages/dsh-nocturne && node tools/build.mjs
+cd packages/dsh-nocturne
+node install.cjs --revert
 ```
 
-## 许可
+> **提示**：卸载脚本具备幂等与干净回滚特性，仅精确移除本插件的注册登记与 bundle，不影响其他插件在 `package.json` 中的后续修改。
 
-MIT（见 `LICENSE`）。上游配方 © Chaosnap；字体 SIL OFL 1.1。
+---
+
+## 控制台快捷 API
+
+在控制台可通过全局对象 `__dshNocturne` 快速调整参数：
+
+```javascript
+__dshNocturne.use('cotton');                                      // 切换纸张材质
+__dshNocturne.use('parchment', { intensity: 1.35, grain: 0.25 }); // 调整光照与颗粒强度
+__dshNocturne.theme('midnight-study');                             // 切换环境光主题
+__dshNocturne.lamp(false);                                         // 临时关灯
+__dshNocturne.off();                                               // 暂时停用纸面渲染
+```
+
+---
+
+## 本地开发与构建
+
+```bash
+npm ci            # 安装开发依赖
+npm run build     # 重新构建客户端、宿主脚本与样张
+npm test          # 运行测试（包含基于真实无头 Edge 的多材质渲染回归）
+npm run check     # 产物漂移检查与全量测试
+```
+
+- 核心渲染管线位于 `packages/dsh-nocturne/src/core/`
+- 原生设置页位于 `packages/dsh-nocturne/src/settings-page.js`
+- 架构设计、着色器推导与渲染细节参见 [移植与设计说明](docs/nocturne.md) 与 [开发文档](docs/development.md)。
+
+---
+
+## 许可与致谢
+
+- 本项目采用 [MIT License](LICENSE) 授权。
+- 纸张与光影配方移植自 [Typewriter Nocturne](https://github.com/Chaosnap/Typewriter-Nocturne)（MIT License，© Chaosnap）。
+- EB Garamond、Cormorant Garamond 和 Courier Prime 字体遵循 [SIL Open Font License 1.1](sample/fonts/)。

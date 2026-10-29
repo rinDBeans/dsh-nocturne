@@ -147,33 +147,25 @@ spread 74°、reach 1、softness 0.65、film grain 0.1），与上游官方截�
 
 样张深链可以单看它：`?caret=继续写什么&caretAt=3`（把光标放到第 3 个字后面）。
 
-## 4.9 · 缮写室 Studio
+## 4.9 · 缮写室（DSH 原生设置页）
 
-上游的 Studio 是一块悬在桌上的深色玻璃面板。这里用同一份 `buildStudio()` 生成——
-**样张和插件调用的是同一个函数**，所以两处的面板不会长歪。
+0.5 起，插件不再挂载上游悬浮 Studio，而是通过官方 `settings.section` 注册独立导航项。
+页面使用宿主 React 与语义 token；分组、设置行、开关、分段控件、响应式和字体与 claude-style 对齐。
 
-![缮写室](previews/studio-panel.png)
+![DSH 原生设置页](previews/nocturne-settings-native.png)
 
-| 段 | 控件 | 落到哪个参数 |
+| 组 | 控件 | 落到哪个参数 |
 | --- | --- | --- |
-| 房间 | 三选一，色块是「房间色 → 光色」的斜切 | `SETTINGS.theme`（房间、灯源、装饰金、渐晕） |
-| 纸 | 六选一，色块是纸色 | `SETTINGS.paper`（纸色、墨色、纸面参数） |
-| 台灯 | 开关 | `SETTINGS.lamp` |
-| 灯 | 灯强 / 光锥 / 柔边 / 胶片颗粒 / 光里尘埃 | 直接改 uniform，即时可见 |
-| 纸纹深度 | 0–160% | 唯一需要重建 surface pass 的一项（会重算 albedo 与法线贴图） |
-| 光标 | 墨迹 / 羽毛 / 原生 | `SETTINGS.cursorMode` |
-
-![羽毛笔（8×）](previews/quill-cursor.png)
+| 纸张与房间 | 六张纸色卡、三种房间 | `SETTINGS.paper` / `SETTINGS.theme` |
+| 灯光与纸纹 | 台灯开关、六个即时渲染滑杆 | uniforms 与 surface pass |
+| 光标与滚动 | 三种光标、三种滚条、金属和细杆参数 | `cursorMode` / `scrollbar` |
+| 共存与诊断 | 三种共存口径、诊断开关、恢复标定值 | `coexist` / `diagnostics` |
 
 **羽毛笔也是移植的**，不是画的图：`quill-cursor.tsx` 里那套几何（笔脊三次贝塞尔、
 羽枝 30 + 22 根按 `sin` 分布求宽、两道分叉的高斯凹陷、锥形笔脊、角质笔杆、鎏金笔箍与笔尖）
 全部照搬，只在原点上画一支再整体右倾 35°。笔尖落在基线上，整支高 1.15 行。
 
-插件里的样子（面板悬在纸光之上，不被灯压暗——上游也是如此，Studio 属于窗框不属于纸面）：
-
-![插件里的缮写室](previews/dsh-plugin-studio.png)
-
-样张深链：`?studio=1&cursor=quill&caret=继续写什么&caretAt=3`。
+样张仍保留 `buildStudio()` 供离线演示；插件设置页使用独立的 `settings-page.js`，两者不再共享上游 UI。
 
 ## 4.10 · 桌面版与皮肤共存
 
@@ -271,9 +263,10 @@ DSH 桌面版每次启动把 web 服务端口设成 0（随机端口），GUI �
 
 | 路径 | 是什么 |
 | --- | --- |
-| `sample/nocturne-desk.html` | 单文件样张：六张纸、灯开关、墨迹光标、深链参数。**这是渲染真源** |
-| `sample/fonts/` | 本地化的 EB Garamond / Courier Prime / Cormorant（OFL） |
-| `packages/dsh-nocturne/` | DSH 客户端插件。`lib/client.js` 由 `tools/build.mjs` **从样张抽取**核心代码生成 |
+| `packages/dsh-nocturne/src/core/` | **渲染真源**：六张纸、灯、光标、滚动条与 Studio |
+| `sample/nocturne-desk.html` | 生成的单文件样张，支持离线打开与深链参数 |
+| `sample/fonts/` | 本地化的 EB Garamond / Courier Prime / Cormorant（附完整 OFL） |
+| `packages/dsh-nocturne/` | DSH 客户端插件；客户端与宿主产物由共享 ES 模块构建 |
 | `docs/previews/nocturne-*.png` | 三张纸的 headless 渲染 |
 | `docs/previews/dsh-plugin-shell.png` | 插件在模拟 DSH 外壳里装载后的样子 |
 | `docs/previews/ink-cursor.png` / `ink-cursor-dsh.png` | 墨迹光标：样张（input）与插件（contenteditable） |
@@ -300,7 +293,9 @@ node install.cjs --revert       # 撤掉
 
 ## 7 · 没做的
 
-- **拟物打字机**（Three.js 模型、字锤、滑架、压纸杆）——按你的要求去掉。
+- **拟物打字机**（Three.js 模型、字锤、滑架、压纸杆）——按需求去掉。
 - **敲击音效**、**拉绳开关**——上游有，本移植不做。
-- **设置页**——插件目前没有 UI，改纸种走控制台：
-  `window.__dshNocturne.use('cotton')` / `.lamp(false)`。持久化在 `localStorage`。
+- **墨滴选区**——已否决，保留系统选区行为，只改颜色。
+- v1 中的**蜡封、落字动画、终端 ANSI、独立原生设置页**——未进入当前版本；恢复前需另立验收标准。
+
+当前设置使用右下角 Studio 面板与控制台 API；持久化采用宿主磁盘真源 + 本地缓存。
