@@ -2,7 +2,7 @@
 /* DSH 适配层：共享渲染核心、官方设置槽、持久化、共存与生命周期。 */
 import {
   SETTINGS, NOCTURNE_DEFAULTS, PAPERS, THEMES, CLIP_FINISHES,
-  paper, theme, washColor, surfaceColor, toUnit, buildRig, reduceMotion,
+  paper, paperFor, setPaperAppearance, theme, washColor, surfaceColor, toUnit, buildRig, reduceMotion,
   poolColor, PaperLight, GlowLayer, InkCaret, ScrollClip
 } from './core/index.js';
 import {createNocturneSettings} from './settings-page.js';
@@ -207,11 +207,35 @@ function foreignSkin() {
   return null;
 }
 
-/** 三种口径：自动（探测到就让位）/ 只叠材质 / 接管配色。 */
+/** 自动模式按宿主明暗完整适配；只有显式选择“只叠材质”才让出宿主配色。 */
 function tokenMode() {
-  if (SETTINGS.coexist === 'full') return 'full';
   if (SETTINGS.coexist === 'material') return 'material';
-  return foreignSkin() ? 'material' : 'full';
+  return 'full';
+}
+
+/** DSH 的明暗模式；优先读主题属性，再读 color-scheme，最后跟随系统。 */
+function detectHostAppearance() {
+  try {
+    for (const node of [document.documentElement, document.body]) {
+      if (!node) continue;
+      for (const name of ['data-ds-dark-theme', 'data-dark-theme']) {
+        if (!node.hasAttribute(name)) continue;
+        const value = node.getAttribute(name);
+        if (value !== 'false' && value !== 'light') return 'dark';
+      }
+      const theme = node.getAttribute('data-theme') || node.getAttribute('data-appearance');
+      if (theme && /dark/i.test(theme)) return 'dark';
+      if (theme && /light/i.test(theme)) return 'light';
+      if (node.classList && (node.classList.contains('dark') || node.classList.contains('theme-dark'))) return 'dark';
+    }
+    const rootScheme = getComputedStyle(document.documentElement).colorScheme || '';
+    const bodyScheme = document.body ? getComputedStyle(document.body).colorScheme || '' : '';
+    const scheme = bodyScheme || rootScheme;
+    if (/dark/i.test(scheme) && !/light/i.test(scheme)) return 'dark';
+    if (/light/i.test(scheme) && !/dark/i.test(scheme)) return 'light';
+    if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) return 'dark';
+  } catch (error) { /* 读不到宿主主题时按浅色处理 */ }
+  return 'light';
 }
 
 /**
@@ -420,16 +444,90 @@ function auditTokens() {
  * 界面底色一直停在默认那张纸上——这条是桌面版自检抓到的（bgBase 与 dnPaper 不一致）。
  * 现在样式表只管 canvas / 光标 / 面板这些不会变的东西，配色一律运行时写。
  */
+function mixHex(from, to, amount) {
+  const a = toUnit(from);
+  const b = toUnit(to);
+  const channels = [0, 1, 2].map((i) => Math.round((a[i] * (1 - amount) + b[i] * amount) * 255));
+  return '#' + channels.map((v) => Math.max(0, Math.min(255, v)).toString(16).padStart(2, '0')).join('');
+}
+function rgbaHex(hex, alpha) {
+  const channels = toUnit(hex).map((v) => Math.round(v * 255));
+  return 'rgba(' + channels.join(', ') + ', ' + alpha + ')';
+}
 function tokenMap(p) {
   const dark = p.appearance === 'dark';
+  const layers = {
+    one: dark ? mixHex(p.paper, '#ffffff', .045) : mixHex(p.paper, '#000000', .035),
+    two: dark ? mixHex(p.paper, '#000000', .035) : mixHex(p.paper, '#000000', .07),
+    three: dark ? mixHex(p.paper, '#ffffff', .075) : mixHex(p.paper, '#ffffff', .025),
+    four: dark ? mixHex(p.paper, '#ffffff', .105) : mixHex(p.paper, '#ffffff', .05)
+  };
+  const state = dark ? {
+    brand:'#c9a45c', brandHover:'#d9b878', error:'#d88a9a', success:'#9cc3a4',
+    warn:'#e2cf9a', business:'#8ea8e0', idle:'#8f89a6'
+  } : {
+    brand:'#8a6529', brandHover:'#a27b3b', error:'#9c3a2a', success:'#4c6b2f',
+    warn:'#8a6a1c', business:'#2f5277', idle:'#7d7264'
+  };
+  const ink = p.ink;
+  const primaryForeground = p.paper;
+  const overlayText = dark ? p.ink : '#f7efdd';
   return {
     '--dsw-alias-bg-base': p.paper,
-    '--dsw-alias-bg-module-platform': p.paper,
-    '--dsw-alias-bg-layer-1': dark ? '#242028' : '#eadcb9',
-    '--dsw-alias-bg-layer-2': dark ? '#1a171d' : '#e6d5b0',
-    '--dsw-alias-label-primary': p.ink,
+    '--dsw-alias-bg-module-platform': layers.one,
+    '--dsw-alias-bg-layer-1': layers.one,
+    '--dsw-alias-bg-layer-2': layers.two,
+    '--dsw-alias-bg-layer-3': layers.three,
+    '--dsw-alias-bg-layer-4': layers.four,
+    '--dsw-alias-bg-overlay': layers.three,
+    '--dsw-alias-bg-mask-1': dark ? 'rgba(0, 0, 0, .58)' : 'rgba(32, 24, 16, .28)',
+    '--dsw-alias-bg-document-selection': p.selection,
+    '--dsw-alias-label-primary': ink,
     '--dsw-alias-label-secondary': p.inkMuted,
-    '--dsw-alias-label-tertiary': dark ? '#8f89a6' : '#7d7264',
+    '--dsw-alias-label-tertiary': p.inkFaint,
+    '--dsw-alias-label-dimmed': p.inkFaint,
+    '--dsw-alias-label-caption': p.inkFaint,
+    '--dsw-alias-label-shimmer': rgbaHex(ink, .18),
+    '--dsw-alias-label-error': state.error,
+    '--dsw-alias-label-primary-foreground': primaryForeground,
+    '--dsw-alias-link': state.business,
+    '--dsw-alias-menu-icon': p.inkMuted,
+    '--dsw-alias-border-l1': rgbaHex(ink, dark ? .10 : .12),
+    '--dsw-alias-border-l2': rgbaHex(ink, dark ? .18 : .18),
+    '--dsw-alias-border-l3': rgbaHex(ink, dark ? .28 : .26),
+    '--dsw-alias-border-l4': rgbaHex(ink, dark ? .38 : .34),
+    '--dsw-alias-border-l2-darkmode-thin': rgbaHex(ink, dark ? .12 : .16),
+    '--dsw-alias-brand-primary': state.brand,
+    '--dsw-alias-button-primary-fill': state.brand,
+    '--dsw-alias-button-primary-hover': state.brandHover,
+    '--dsw-alias-button-ghost-active-fill': rgbaHex(state.brand, .16),
+    '--dsw-alias-button-ghost-active-border': rgbaHex(state.brand, .46),
+    '--dsw-alias-button-tool-bar-fill': layers.two,
+    '--dsw-alias-interactive-bg-hover': rgbaHex(ink, .06),
+    '--dsw-alias-interactive-bg-active': rgbaHex(ink, .11),
+    '--dsw-alias-interactive-bg-hover-danger': rgbaHex(state.error, .12),
+    '--dsw-alias-state-success-primary': state.success,
+    '--dsw-alias-state-success-tertiary': rgbaHex(state.success, .16),
+    '--dsw-alias-state-warn-primary': state.warn,
+    '--dsw-alias-state-warn-tertiary': rgbaHex(state.warn, .16),
+    '--dsw-alias-state-warn-label': state.warn,
+    '--dsw-alias-state-error-primary': state.error,
+    '--dsw-alias-state-business-primary': state.business,
+    '--dsw-alias-state-idle-primary': state.idle,
+    '--dsw-alias-markdown-code-block': layers.two,
+    '--dsw-alias-markdown-code-block-banner': layers.one,
+    '--dsw-alias-markdown-inline-code': layers.two,
+    '--dsw-alias-markdown-tag': rgbaHex(state.brand, .16),
+    '--dsw-alias-code-diff-added': rgbaHex(state.success, .15),
+    '--dsw-alias-code-diff-deleted': rgbaHex(state.error, .14),
+    '--dsw-alias-scrollbar-bg-l2': rgbaHex(ink, dark ? .16 : .18),
+    '--dsw-alias-scrollbar-hover-l2': rgbaHex(ink, dark ? .30 : .30),
+    '--dsw-alias-switch-thumb': dark ? mixHex(p.paper, '#ffffff', .78) : p.paper,
+    '--dsw-alias-tooltip-bg': dark ? layers.four : '#2b231c',
+    '--dsw-alias-tooltip-key-bg': dark ? layers.three : '#3a2f27',
+    '--dsw-alias-toast-bg': dark ? layers.four : '#2b231c',
+    '--dsw-alias-toast-label': overlayText,
+    '--dsw-alias-menu-group-header-fill': rgbaHex(p.paper, .94),
     '--dn-paper': p.paper,
     '--dn-ink': p.ink,
     '--dn-caret-ink': p.cursor,
@@ -437,11 +535,9 @@ function tokenMap(p) {
     '--dn-metal-hi': '#f3dca4',
     '--dn-metal': '#b8904c',
     '--dn-sheet': p.paper,
-    // 选区底色：纸自己的调子（浅色纸取描金，深色纸取月白）
     '--dn-selection': washColor(),
     '--dsh-font-family-text': '"EB Garamond", "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, "Source Han Serif SC", "Songti SC", "Noto Serif CJK SC", serif',
-    '--dsh-font-family-code': '"Courier Prime", "IBM Plex Mono", "Courier New", "DejaVu Sans Mono", ui-monospace, monospace',
-
+    '--dsh-font-family-code': '"Courier Prime", "IBM Plex Mono", "Courier New", "DejaVu Sans Mono", ui-monospace, monospace'
   };
 }
 
@@ -531,6 +627,8 @@ function injectStyle() {
 
 function mount() {
   if (document.querySelector('canvas[' + PAPER_ATTR + ']')) return;
+  let hostAppearance = detectHostAppearance();
+  setPaperAppearance(hostAppearance);
   readSettings();
   injectStyle();
 
@@ -718,6 +816,34 @@ function mount() {
   const observer = new ResizeObserver(reposition);
   observer.observe(document.documentElement);
 
+  /** 宿主切换明暗时，同步选用另一套纸面变体，并重建纸与辉光。 */
+  const onHostAppearanceChange = () => {
+    const next = detectHostAppearance();
+    if (next === hostAppearance || stopped) return;
+    hostAppearance = next;
+    setPaperAppearance(hostAppearance);
+    applyTokens();
+    scrollClip.apply();
+    caret.hide();
+    needsBuild = true;
+    needsLight = true;
+    lastPaintAt = 0;
+    notifySettings();
+    reposition();
+  };
+  const appearanceObserver = new MutationObserver(onHostAppearanceChange);
+  for (const node of [document.documentElement, document.body]) {
+    if (node) appearanceObserver.observe(node, {
+      attributes: true,
+      attributeFilter: ['data-ds-dark-theme', 'data-dark-theme', 'data-theme', 'data-appearance', 'class']
+    });
+  }
+  const colorSchemeQuery = window.matchMedia ? window.matchMedia('(prefers-color-scheme: dark)') : null;
+  if (colorSchemeQuery) {
+    if (typeof colorSchemeQuery.addEventListener === 'function') colorSchemeQuery.addEventListener('change', onHostAppearanceChange);
+    else if (typeof colorSchemeQuery.addListener === 'function') colorSchemeQuery.addListener(onHostAppearanceChange);
+  }
+
   const onSelection = () => { needsLight = true; };
   // 页面看不见时停掉循环：一张一直重算的纸，在后台没人看，白烧电。
   const onVisibility = () => {
@@ -900,6 +1026,8 @@ function mount() {
     state: () => SETTINGS,
     foreign: foreignSkin,
     resolvedCoexist: tokenMode,
+    appearance: () => paper().appearance,
+    paperColor: (id) => paperFor(id).paper,
     revision: () => settingsRevision,
     subscribe(listener) {
       settingsListeners.add(listener);
@@ -1015,6 +1143,11 @@ function mount() {
     stopped = true;
     if (frameId) { cancelAnimationFrame(frameId); frameId = 0; }
     observer.disconnect();
+    appearanceObserver.disconnect();
+    if (colorSchemeQuery) {
+      if (typeof colorSchemeQuery.removeEventListener === 'function') colorSchemeQuery.removeEventListener('change', onHostAppearanceChange);
+      else if (typeof colorSchemeQuery.removeListener === 'function') colorSchemeQuery.removeListener(onHostAppearanceChange);
+    }
     window.removeEventListener('resize', reposition);
     document.removeEventListener('selectionchange', onSelection);
     document.removeEventListener('visibilitychange', onVisibility);

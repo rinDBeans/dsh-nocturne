@@ -99,6 +99,8 @@ spread 74°、reach 1、softness 0.65、film grain 0.1），与上游官方截�
 | `midnight-study` | Midnight Study | 桌面台灯（desk-lamp，#ffb35c） | #140f0b |
 | `moonlit-poetry` | Moonlit Poetry | 月窗（moonlight，#c9d4ff） | #0e0e1a |
 
+插件中，每张纸还会按 DSH 宿主明暗切换到对应变体；样张没有宿主明暗，仍按纸张自身的原生身份渲染。
+
 样张底部两条切换条就是这六个纸与三个房间，深链一一对应：
 `?paper=cotton&theme=moonlit-poetry`。
 

@@ -12,7 +12,7 @@ const THEMES_LIST = [
 const CURSORS = [['ink', '墨迹'], ['quill', '羽毛'], ['none', '原生']];
 const SCROLLS = [['clip', '纸夹'], ['bar', '细杆'], ['native', '原生']];
 const FINISHES = [['silver', '银'], ['brass', '黄铜'], ['gold', '金'], ['black', '黑']];
-const COEXISTS = [['auto', '自动'], ['material', '只叠材质'], ['full', '接管配色']];
+const COEXISTS = [['auto', '自动适配'], ['material', '只叠材质'], ['full', '接管配色']];
 const SLIDERS = [
   ['intensity', '灯强', 0, 2, 0.05, (v) => Math.round(v * 100) + '%'],
   ['spread', '光锥', 20, 160, 1, (v) => Math.round(v) + '°'],
@@ -49,7 +49,7 @@ function Segment({label, value, choices, onChange}) {
     }, name)));
 }
 
-function PaperGrid({value, onChange}) {
+function PaperGrid({value, onChange, colorOf}) {
   return h('div', {className: 'dn-paper-grid', role: 'group', 'aria-label': '纸张'},
     PAPERS_LIST.map(([id, name]) => h('button', {
       key: id, type: 'button', className: 'dn-paper-choice',
@@ -57,7 +57,7 @@ function PaperGrid({value, onChange}) {
       'aria-pressed': value === id ? 'true' : 'false',
       onClick: () => { if (value !== id) onChange(id); }
     },
-      h('span', {className: 'dn-paper-swatch', style: {backgroundColor: PAPERS[id].paper}, 'aria-hidden': 'true'}),
+      h('span', {className: 'dn-paper-swatch', style: {backgroundColor: colorOf(id)}, 'aria-hidden': 'true'}),
       h('span', {className: 'dn-paper-name'}, name))));
 }
 
@@ -99,7 +99,7 @@ export function createNocturneSettings(options) {
     return h('main', {
       className: 'dn-settings',
       'data-dn-settings': '',
-      'data-appearance': PAPERS[settings.paper].appearance
+      'data-appearance': options.appearance()
     },
       h('header', {className: 'dn-settings-header'},
         h('div', null,
@@ -108,7 +108,7 @@ export function createNocturneSettings(options) {
 
       h(Group, {title: '纸张与房间'},
         h(Row, {id: 'paper', title: '纸张', description: '决定纸色、墨色、纤维与做旧纹理。', block: true},
-          h(PaperGrid, {value: settings.paper, onChange: (value) => change('paper', value)})),
+          h(PaperGrid, {value: settings.paper, onChange: (value) => change('paper', value), colorOf: options.paperColor})),
         h(Row, {id: 'theme', title: '房间', description: '改变光源、房间气氛与选区色。'},
           h(Segment, {label: '房间', value: settings.theme, choices: THEMES_LIST, onChange: (value) => change('theme', value)}))),
 

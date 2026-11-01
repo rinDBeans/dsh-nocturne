@@ -8,7 +8,7 @@ window.__ModuleLoader__.load({
     var module = { exports: {} };
     var exports = module.exports;
     const CSS_TEXT = "/* dsh-nocturne —— 纸的配色由 token 决定，材质由 canvas 决定。\n   这里只做两件事：把 DSH 的语义别名换成纸与墨；给两片 canvas 找位置。\n   颜色取自 Typewriter-Nocturne 的 papers.ts（MIT）。 */\n\nhtml, :root {\n  --dn-paper: #efdfbd;\n  --dn-ink: #2a2019;\n  --dn-ink-muted: #6b5f52;\n  --dn-room: #241a14;\n  --dn-room-edge: #070504;\n  --dn-gilt: #6f5420;\n  --dn-light-rgb: 255 210 154;\n  --dn-metal-lo: #5e431c;\n  --dn-metal-hi: #f3dca4;\n  --dn-metal: #b8904c;\n  --font-mono: var(--dsh-font-family-code, ui-monospace, monospace);\n\n  /* 配色 token 不写在这里：运行时由 applyTokens() 内联写入并带 !important。\n     写在这里会反过来压过内联更新，导致换纸只换画布、不换界面底色。 */\n\n  /* 字体由 applyTokens() 仅在 full 模式写入；material 保留宿主或 claude-style 字体。 */\n}\n\n/* 整扇窗就是这张纸。没被画到的地方也必须落到纸色上——否则留给 `html` 的\n   默认底会把正文区露成黑洞（第一次装载测试就是这么翻车的）。 */\n/* 纸的底色挂在 --dn-sheet 上：接管配色时是纸色，只让位时是 transparent（宿主自己画）。 */\nhtml, body { background: var(--dn-sheet, transparent) !important; }\n\n/* 两片 canvas：直接挂在 body 下，不能包一层带 z-index 的容器——\n   那会给它们造一个隔离栈，multiply 就再也合不到页面上（实测见 docs/nocturne.md）。 */\ncanvas[data-dn=\"paper\"], canvas[data-dn=\"glow\"] {\n  position: fixed;\n  left: 0;\n  top: 0;\n  display: block;\n  pointer-events: none;\n  transform-origin: 0 0;\n}\ncanvas[data-dn=\"paper\"] {\n  mix-blend-mode: multiply;\n  z-index: 2147482000;\n}\ncanvas[data-dn=\"glow\"] {\n  mix-blend-mode: screen;\n  z-index: 2147482001;\n}\n\n/* 纸的四边压暗，给出\"一张纸\"的厚度；比 TN 的 #vignette 更贴边，\n   因为这里的纸是整扇窗。 */\nhtml::after {\n  content: \"\";\n  position: fixed;\n  inset: 0;\n  z-index: 2147482003;\n  pointer-events: none;\n  background: radial-gradient(ellipse 92% 88% at 50% 46%, transparent 52%, rgba(0, 0, 0, .42) 100%);\n}\n\n.dn-caret{\n  position:fixed; left:0; top:0; z-index: 2147481999;\n  display:none; pointer-events:none; will-change:transform;\n  --dn-ink-size:16px;\n  --dn-ink-weight:400;\n}\n.dn-ink-blot,\n.dn-ink-halo{\n  position:absolute; inset:7% 0.5px;\n  background:var(--dn-caret-ink, #3a2c20);\n}\n.dn-ink-blot{\n  border-radius:22% 14% 18% 12% / 12% 20% 10% 18%;\n  box-shadow:\n    inset 0 0 0 .5px rgba(0,0,0,.22),\n    inset 0 0 3px rgba(0,0,0,.28),\n    0 0 1.2px var(--dn-caret-ink, #3a2c20);\n  filter:blur(.3px);\n}\n.dn-ink-halo{\n  border-radius:40%;\n  opacity:0;\n  filter:blur(2.5px);\n}\n.dn-ink-glyph{\n  position:absolute; inset:0;\n  display:flex; align-items:center; justify-content:center;\n  color:var(--dsw-alias-bg-base, #efdfbd);\n  font-family:var(--dsh-font-family-code, ui-monospace, monospace);\n  font-size:var(--dn-ink-size);\n  font-weight:var(--dn-ink-weight);\n  line-height:1; white-space:pre;\n  font-variant-ligatures:none;\n}\n/* 失焦时墨退掉，只留一个淡淡的格子轮廓。 */\n.dn-caret[data-focused=\"false\"] .dn-ink-blot,\n.dn-caret[data-focused=\"false\"] .dn-ink-halo,\n.dn-caret[data-focused=\"false\"] .dn-ink-glyph{ display:none }\n.dn-caret[data-focused=\"false\"]::after{\n  content:\"\"; position:absolute; inset:7% .5px;\n  border:1px solid var(--dn-caret-ink, #3a2c20); border-radius:2px; opacity:.45;\n}\n.dn-caret[data-appearance=\"dark\"] .dn-ink-blot{\n  box-shadow:\n    inset 0 0 0 .5px rgba(255,255,255,.25),\n    inset 0 0 3px rgba(255,255,255,.3),\n    0 0 1.2px var(--dn-caret-ink, #3a2c20);\n}\n/* ── 羽毛笔光标：形状、渐变、摆动、光晕都照搬上游 .tn-quill ─────────────── */\n.dn-quill{\n  position:fixed; left:0; top:0; z-index:1;\n  display:none; pointer-events:none; will-change:transform;\n  --dn-quill-edge:#120e0c;\n  --dn-quill-body:#2b2420;\n  --dn-quill-sheen:#5f5753;\n  --dn-quill-barb:rgba(168,152,138,.42);\n  --dn-quill-rachis:#e4d8c0;\n  --dn-quill-down:rgba(70,60,54,.65);\n  filter:drop-shadow(.8px 1.6px 1px rgba(0,0,0,.3));\n  animation:dn-quill-breathe 1.2s ease-in-out infinite alternate;\n}\n.dn-quill[data-appearance=\"dark\"]{\n  --dn-quill-edge:#9d9485;\n  --dn-quill-body:#ebe4d6;\n  --dn-quill-sheen:#fffdf8;\n  --dn-quill-barb:rgba(140,128,108,.5);\n  --dn-quill-rachis:#fffdf6;\n  --dn-quill-down:rgba(236,229,216,.75);\n}\n.dn-quill svg{display:block; width:100%; height:100%; overflow:visible}\n.dn-quill-sway{transform-box:view-box; transform-origin:0 0; animation:dn-quill-sway 3.4s ease-in-out infinite alternate}\n.dn-quill-vane{fill:url(#dn-quill-vane)}\n.dn-quill-barbs{fill:none; stroke:var(--dn-quill-barb); stroke-width:.28; stroke-linecap:round}\n.dn-quill-rachis{fill:var(--dn-quill-rachis)}\n.dn-quill-rachis-light{fill:none; stroke:#fff; stroke-width:.22; opacity:.55}\n.dn-quill-down{fill:none; stroke:var(--dn-quill-down); stroke-width:.35; stroke-linecap:round}\n.dn-quill-engraving{fill:none; stroke:var(--dn-metal-lo); stroke-width:.3}\n.dn-quill-hole{fill:var(--dn-metal-lo)}\n.dn-quill-shine{fill:#fff; opacity:.2; animation:dn-quill-shine 2.8s ease-in-out infinite}\n.dn-quill-glint{fill:#fff; opacity:0; animation:dn-quill-glint 2.8s ease-in-out infinite}\n.dn-quill[data-focused=\"false\"]{opacity:.4; animation:none}\n.dn-quill[data-focused=\"false\"] .dn-quill-sway,\n.dn-quill[data-focused=\"false\"] .dn-quill-shine,\n.dn-quill[data-focused=\"false\"] .dn-quill-glint{animation:none}\n@keyframes dn-quill-breathe{from{opacity:1} to{opacity:.62}}\n@keyframes dn-quill-sway{from{transform:rotate(-1.6deg)} to{transform:rotate(1.6deg)}}\n@keyframes dn-quill-shine{0%{transform:translateY(0)} 100%{transform:translateY(-46px)}}\n@keyframes dn-quill-glint{\n  0%,72%{opacity:0}\n  80%{opacity:.9}\n  88%{opacity:.15}\n  100%{opacity:0}\n}\n\n\n@media (prefers-reduced-motion:reduce){\n  .dn-quill,.dn-quill-sway,.dn-quill-shine,.dn-quill-glint{animation:none}\n  \n}\n\n/* ── 选区：纸自己的颜色 ────────────────────────────────────────────────\n   不是系统那种蓝，也压不住系统的行为——只换背景色，拖动、复制、双击选词全归浏览器。\n   不加 !important：宿主若另有口径，让它赢。 */\n::selection{ background:var(--dn-selection, rgba(176,138,74,.28)); color:inherit }\n::-moz-selection{ background:var(--dn-selection, rgba(176,138,74,.28)); color:inherit }\n\n/* ── 纸夹：一枚 Gem 夹夹在纸的右缘 ────────────────────────────────────\n   外圈在纸前，内舌在纸后（只留下压住纸面的一道痕），弯头探出纸外。\n   金属丝按\"上左受光\"的管状上色：暗边 + 本体 + 沿光侧的高光。 */\n/* 不挂 will-change:transform：纸夹一帧最多动几像素，不值得在这么重的界面里\n   常驻一个合成层。滚动位置由 rAF 直接写 transform，已经够顺。 */\n.dn-scroll{\n  position:fixed; left:0; top:0;\n  touch-action:none; cursor:grab;\n}\n.dn-scroll[hidden]{ display:none }\n.dn-scroll:active{ cursor:grabbing }\n.dn-scroll:focus-visible{ outline:1px dotted var(--dn-metal, #b8904c); outline-offset:3px }\n.dn-scroll-clip svg{ display:block; width:100%; height:100%; overflow:visible }\n.dn-scroll-clip path{ fill:none; stroke-linecap:round; stroke-linejoin:round }\n.dn-clip-edge{ stroke-width:3.3 }\n.dn-clip-body{ stroke-width:2.6 }\n.dn-clip-light{ stroke-width:.9; opacity:.9 }\n.dn-clip-glint{ stroke:#fff; stroke-width:.55; stroke-dasharray:1.6 11 .8 17; opacity:.85 }\n.dn-clip-shadow{ stroke:rgba(28,18,8,.42); stroke-width:3; transform:translate(1px,1.9px) }\n.dn-clip-pressed{ stroke:rgba(40,28,16,.07); stroke-width:2.2 }\n.dn-scroll[data-appearance=\"dark\"] .dn-clip-shadow{ stroke:rgba(0,0,0,.62) }\n.dn-scroll[data-appearance=\"dark\"] .dn-clip-pressed{ stroke:rgba(255,255,255,.05) }\n.dn-scroll-bar{\n  border-radius:999px;\n  background:rgba(255,255,255,.92);\n  box-shadow:0 0 0 1px rgba(0,0,0,.08), 0 2px 6px rgba(0,0,0,.25);\n}\n.dn-scroll[data-appearance=\"dark\"].dn-scroll-bar{ background:rgba(255,255,255,.75) }\n\n/* 容器的原生滚条让位给纸夹；滚轮、键盘、拖动都还在。 */\n[data-dn-scroll=\"custom\"]{ scrollbar-width:none; -ms-overflow-style:none }\n[data-dn-scroll=\"custom\"]::-webkit-scrollbar{ width:0; height:0 }\n\n.dn-settings {\n  box-sizing: border-box;\n  width: 100%;\n  color: var(--dsw-alias-label-primary);\n  font-family: var(--dsw-font-family, var(--dsh-font-family-text, Inter, system-ui, sans-serif));\n  font-size: 14px;\n  line-height: 22px;\n}\n.dn-settings *, .dn-settings *::before, .dn-settings *::after { box-sizing: border-box; }\n.dn-settings button, .dn-settings input { font: inherit; }\n.dn-settings button { -webkit-tap-highlight-color: transparent; }\n.dn-settings-header { padding: 4px 0 18px; }\n.dn-settings-title { margin: 0; font-size: 20px; font-weight: 500; line-height: 30px; letter-spacing: normal; }\n.dn-settings-subtitle { margin: 4px 0 0; color: var(--dsw-alias-label-tertiary); font-size: 12px; line-height: 18px; }\n.dn-settings-group { margin: 0; padding: 0; border: 0; min-width: 0; }\n.dn-settings-group-title {\n  margin: 0;\n  padding: 22px 0 6px;\n  border-top: .5px solid var(--dsh-claude-divider, var(--dsw-alias-border-l2));\n  color: var(--dsw-alias-label-secondary);\n  font-size: 12px;\n  font-weight: 600;\n  line-height: 18px;\n  letter-spacing: .04em;\n}\n.dn-settings-group:first-of-type .dn-settings-group-title { padding-top: 14px; border-top: 0; }\n.dn-settings-row {\n  display: flex;\n  align-items: center;\n  flex-wrap: wrap;\n  gap: 12px 16px;\n  min-height: 58px;\n  padding: 14px 0;\n  border-top: .5px solid var(--dsh-claude-divider, var(--dsw-alias-border-l2));\n}\n.dn-settings-group-title + .dn-settings-group-rows > .dn-settings-row:first-child { border-top: 0; }\n.dn-settings-row-text { flex: 1 1 180px; min-width: 0; display: flex; flex-direction: column; gap: 4px; padding-right: 24px; }\n.dn-settings-row-title { color: var(--dsw-alias-label-primary); font-size: 14px; font-weight: 400; line-height: 22px; }\n.dn-settings-row-desc { max-width: 390px; color: var(--dsw-alias-label-tertiary); font-size: 12px; line-height: 18px; }\n.dn-settings-row-control { flex: none; display: flex; align-items: center; justify-content: flex-end; max-width: 100%; }\n.dn-settings-row-block { align-items: stretch; flex-direction: column; }\n.dn-settings-row-block .dn-settings-row-text { padding-right: 0; }\n.dn-settings-row-block .dn-settings-row-control { width: 100%; justify-content: flex-start; }\n.dn-segments { display: inline-flex; align-items: center; gap: 2px; max-width: 100%; padding: 2px; border: 1px solid var(--dsw-alias-border-l1); border-radius: var(--dsw-radius-md, 6px); background: var(--dsw-specific-selector, var(--dsw-alias-bg-layer-1)); }\n.dn-segment {\n  min-height: 28px;\n  margin: 0;\n  padding: 3px 10px;\n  border: 0;\n  border-radius: calc(var(--dsw-radius-md, 6px) - 2px);\n  cursor: pointer;\n  background: transparent;\n  color: var(--dsw-alias-label-secondary);\n  font-size: 12px;\n  line-height: 20px;\n  white-space: nowrap;\n}\n.dn-segment:hover { background: var(--dsw-alias-interactive-bg-hover); color: var(--dsw-alias-label-primary); }\n.dn-segment[data-active] { background: var(--dsw-alias-bg-overlay, var(--dsw-alias-bg-layer-3)); color: var(--dsw-alias-label-primary); box-shadow: 0 1px 2px rgba(0,0,0,.08); }\n.dn-segment:focus-visible, .dn-paper-choice:focus-visible, .dn-switch:focus-visible, .dn-reset:focus-visible, .dn-slider input:focus-visible { outline: 2px solid var(--dsw-alias-brand-primary); outline-offset: 2px; }\n.dn-paper-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; width: 100%; }\n.dn-paper-choice {\n  display: flex;\n  align-items: center;\n  gap: 8px;\n  min-width: 0;\n  min-height: 40px;\n  padding: 6px 8px;\n  border: 1px solid var(--dsw-alias-border-l1);\n  border-radius: var(--dsw-radius-md, 6px);\n  cursor: pointer;\n  background: var(--dsw-alias-bg-layer-1);\n  color: var(--dsw-alias-label-secondary);\n  text-align: left;\n}\n.dn-paper-choice:hover { border-color: var(--dsw-alias-border-l2); background: var(--dsw-alias-interactive-bg-hover); }\n.dn-paper-choice[data-active] { border-color: var(--dsw-alias-brand-primary); color: var(--dsw-alias-label-primary); box-shadow: 0 0 0 1px var(--dsw-alias-brand-primary); }\n.dn-paper-swatch { flex: none; width: 24px; height: 24px; border: 1px solid var(--dsw-alias-border-l1); border-radius: 4px; box-shadow: inset 0 0 0 1px rgba(255,255,255,.12); }\n.dn-paper-name { min-width: 0; overflow: hidden; font-size: 12px; line-height: 18px; text-overflow: ellipsis; white-space: nowrap; }\n.dn-switch {\n  appearance: none;\n  flex: none;\n  width: 36px;\n  height: 20px;\n  margin: 0;\n  padding: 2px;\n  border: 0;\n  border-radius: 10px;\n  cursor: pointer;\n  background: var(--dsw-specific-selector, var(--dsw-alias-interactive-bg-active));\n  transition: background-color 140ms ease;\n}\n.dn-switch[data-on] { background: var(--dsw-alias-brand-primary); }\n.dn-switch-knob { display: block; width: 16px; height: 16px; border-radius: 50%; background: var(--dsw-alias-bg-overlay, #fff); box-shadow: 0 1px 2px rgba(20,20,19,.18); translate: 0 0; transition: translate 140ms ease; }\n.dn-switch[data-on] .dn-switch-knob { translate: 16px 0; }\n.dn-slider { display: flex; align-items: center; gap: 12px; width: min(240px, 42vw); }\n.dn-slider-range {\n  --dn-slider-fill: #574331;\n  --dn-slider-track: #bda98c;\n  --dn-slider-ink: #4b3827;\n  --dn-slider-thumb: #70563c;\n  --dn-slider-tick: #a58f70;\n  position: relative;\n  flex: 1 1 140px;\n  min-width: 80px;\n  height: 28px;\n  display: flex;\n  align-items: center;\n}\n.dn-slider-range::after {\n  content: \"\";\n  position: absolute;\n  z-index: 0;\n  left: 0;\n  right: 0;\n  top: 19px;\n  height: 4px;\n  pointer-events: none;\n  background: repeating-linear-gradient(90deg, var(--dn-slider-tick) 0 1px, transparent 1px 20%);\n}\n.dn-slider-range input {\n  position: relative;\n  z-index: 1;\n  appearance: none;\n  -webkit-appearance: none;\n  width: 100%;\n  height: 28px;\n  margin: 0;\n  padding: 0;\n  border: 0;\n  background: transparent;\n  cursor: pointer;\n}\n.dn-slider-range input::-webkit-slider-runnable-track {\n  width: 100%;\n  height: 2px;\n  border: 0;\n  border-radius: 0;\n  background: linear-gradient(to right,\n    var(--dn-slider-fill) 0 var(--dn-range-progress),\n    var(--dn-slider-track) var(--dn-range-progress) 100%);\n}\n.dn-slider-range input::-webkit-slider-thumb {\n  appearance: none;\n  -webkit-appearance: none;\n  width: 8px;\n  height: 16px;\n  margin-top: -7px;\n  border: 1px solid var(--dn-slider-ink);\n  border-radius: 0;\n  background: var(--dn-slider-thumb);\n  box-shadow: none;\n}\n.dn-slider-range input::-moz-range-track {\n  width: 100%;\n  height: 2px;\n  border: 0;\n  border-radius: 0;\n  background: var(--dn-slider-track);\n}\n.dn-slider-range input::-moz-range-progress { height: 2px; background: var(--dn-slider-fill); }\n.dn-slider-range input::-moz-range-thumb {\n  width: 8px;\n  height: 16px;\n  border: 1px solid var(--dn-slider-ink);\n  border-radius: 0;\n  background: var(--dn-slider-thumb);\n  box-shadow: none;\n}\n.dn-settings[data-appearance=\"dark\"] .dn-slider-range {\n  --dn-slider-fill: #c4b8db;\n  --dn-slider-track: #6f6380;\n  --dn-slider-ink: #27222e;\n  --dn-slider-thumb: #b7a9d1;\n  --dn-slider-tick: #756783;\n}\n.dn-slider-value { flex: none; min-width: 48px; color: var(--dsw-alias-label-secondary); font-family: var(--dsh-claude-font-code, var(--dsh-font-family-code, monospace)); font-size: 12px; line-height: 18px; text-align: right; font-variant-numeric: tabular-nums; }\n.dn-reset {\n  min-height: 32px;\n  padding: 4px 12px;\n  border: 1px solid var(--dsw-alias-border-l2);\n  border-radius: var(--dsw-radius-md, 6px);\n  cursor: pointer;\n  background: var(--dsw-alias-button-elevated-fill, var(--dsw-alias-bg-layer-1));\n  color: var(--dsw-alias-label-primary);\n  font-size: 12px;\n  line-height: 20px;\n}\n.dn-reset:hover { border-color: var(--dsw-alias-brand-primary); background: var(--dsw-alias-interactive-bg-hover); }\n.dn-settings-footer { display: flex; justify-content: space-between; gap: 12px; padding: 20px 0 4px; border-top: .5px solid var(--dsh-claude-divider, var(--dsw-alias-border-l2)); color: var(--dsw-alias-label-caption); font-size: 11px; line-height: 16px; }\n@media (max-width: 560px) {\n  .dn-settings-row { align-items: flex-start; }\n  .dn-settings-row-text { flex-basis: 140px; padding-right: 0; }\n  .dn-settings-row-control { flex: 1 1 100%; justify-content: flex-start; }\n  .dn-segments { flex-wrap: wrap; }\n  .dn-slider { width: 100%; }\n}\n@media (prefers-reduced-motion: reduce) {\n  .dn-switch, .dn-switch-knob { transition: none; }\n}\n";
-    const DN_VERSION = "0.5.4";
+    const DN_VERSION = "0.6.0";
 
 var __DshNocturneModule = (() => {
   var __create = Object.create;
@@ -112,37 +112,92 @@ var __DshNocturneModule = (() => {
     lightCyan: "#a8dbe6",
     lightWhite: "#f0f0fa"
   };
-  var lightPaper = (id, name2, paperColor, surface) => ({
-    id,
-    name: name2,
-    appearance: "light",
-    paper: paperColor,
+  var LIGHT_INK = {
     ink: "#2a2019",
     inkMuted: "#6b5f52",
+    inkFaint: "#8a7d6b",
     cursor: "#3a2c20",
-    selection: "rgba(52, 64, 112, 0.2)",
-    ansi: LIGHT_ANSI,
-    surface
-  });
-  var PAPERS = {
-    cotton: lightPaper("cotton", "Cotton", "#eee6d5", { crinkle: 0.3, felt: 1, laid: 0, linen: 0, mottle: 0.08, age: 0 }),
-    laid: lightPaper("laid", "Laid", "#f1e9d6", { crinkle: 0.22, felt: 0, laid: 1, linen: 0, mottle: 0.18, age: 0 }),
-    linen: lightPaper("linen", "Linen", "#ebe5d8", { crinkle: 0.2, felt: 0, laid: 0, linen: 1, mottle: 0.08, age: 0 }),
-    onionskin: lightPaper("onionskin", "Onionskin", "#f2f1ea", { crinkle: 0.08, felt: 0, laid: 0, linen: 0, mottle: 0.04, age: 0 }),
-    parchment: lightPaper("parchment", "Parchment", "#efdfbd", { crinkle: 0.25, felt: 0, laid: 0, linen: 0, mottle: 1, age: 0.75 }),
-    night: {
-      id: "night",
-      name: "Night",
-      appearance: "dark",
-      paper: "#1d1a20",
-      ink: "#e6e1ea",
-      inkMuted: "#9a94a6",
-      cursor: "#e9e7ff",
-      selection: "rgba(196, 188, 255, 0.2)",
-      ansi: NIGHT_ANSI,
-      surface: { crinkle: 0.3, felt: 0, laid: 0, linen: 0, mottle: 0.1, age: 0 }
-    }
+    selection: "rgba(52, 64, 112, 0.2)"
   };
+  var DARK_INK = {
+    ink: "#ece6db",
+    inkMuted: "#aaa193",
+    inkFaint: "#7a7165",
+    cursor: "#f2eadb",
+    selection: "rgba(196, 188, 255, 0.20)"
+  };
+  function paperVariant(id, name2, appearance, paper2, ink, surface) {
+    return { id, name: name2, appearance, paper: paper2, surface, ansi: appearance === "dark" ? NIGHT_ANSI : LIGHT_ANSI, ...ink };
+  }
+  function paperEntry(id, name2, nativeAppearance, surface, light, dark) {
+    const lightVariant = paperVariant(id, name2, "light", light.paper, { ...LIGHT_INK, ...light }, surface);
+    const darkVariant = paperVariant(id, name2, "dark", dark.paper, { ...DARK_INK, ...dark }, surface);
+    return {
+      ...nativeAppearance === "dark" ? darkVariant : lightVariant,
+      id,
+      name: name2,
+      nativeAppearance,
+      variants: { light: lightVariant, dark: darkVariant }
+    };
+  }
+  var PAPERS = {
+    cotton: paperEntry(
+      "cotton",
+      "Cotton",
+      "light",
+      { crinkle: 0.3, felt: 1, laid: 0, linen: 0, mottle: 0.08, age: 0 },
+      { paper: "#eee6d5" },
+      { paper: "#26231e", ink: "#eee6d8", inkMuted: "#aaa08f", inkFaint: "#796f61" }
+    ),
+    laid: paperEntry(
+      "laid",
+      "Laid",
+      "light",
+      { crinkle: 0.22, felt: 0, laid: 1, linen: 0, mottle: 0.18, age: 0 },
+      { paper: "#f1e9d6" },
+      { paper: "#29251d", ink: "#efe6d4", inkMuted: "#ad9f87", inkFaint: "#796d5b" }
+    ),
+    linen: paperEntry(
+      "linen",
+      "Linen",
+      "light",
+      { crinkle: 0.2, felt: 0, laid: 0, linen: 1, mottle: 0.08, age: 0 },
+      { paper: "#ebe5d8" },
+      { paper: "#24231f", ink: "#ebe7da", inkMuted: "#a7a191", inkFaint: "#716b5f" }
+    ),
+    onionskin: paperEntry(
+      "onionskin",
+      "Onionskin",
+      "light",
+      { crinkle: 0.08, felt: 0, laid: 0, linen: 0, mottle: 0.04, age: 0 },
+      { paper: "#f2f1ea" },
+      { paper: "#232325", ink: "#e9e7e2", inkMuted: "#a8a49e", inkFaint: "#74716c" }
+    ),
+    parchment: paperEntry(
+      "parchment",
+      "Parchment",
+      "light",
+      { crinkle: 0.25, felt: 0, laid: 0, linen: 0, mottle: 1, age: 0.75 },
+      { paper: "#efdfbd" },
+      { paper: "#2d2419", ink: "#efe2c8", inkMuted: "#b29c7b", inkFaint: "#7d6b53" }
+    ),
+    night: paperEntry(
+      "night",
+      "Night",
+      "dark",
+      { crinkle: 0.3, felt: 0, laid: 0, linen: 0, mottle: 0.1, age: 0 },
+      { paper: "#e9e6f0", ink: "#282435", inkMuted: "#655f78", inkFaint: "#948da5", cursor: "#312b45", selection: "rgba(112,96,160,.22)" },
+      { paper: "#1d1a20", ink: "#e6e1ea", inkMuted: "#9a94a6", inkFaint: "#6f7192", cursor: "#e9e7ff", selection: "rgba(196,188,255,.20)" }
+    )
+  };
+  var PAPER_APPEARANCE = "light";
+  function setPaperAppearance(appearance) {
+    PAPER_APPEARANCE = appearance === "dark" ? "dark" : "light";
+  }
+  function paperFor(id) {
+    const base = PAPERS[id] || PAPERS.parchment;
+    return base.variants[PAPER_APPEARANCE];
+  }
   var THEMES = {
     "paper-and-ink": {
       selection: "rgba(176,138,74,.30)",
@@ -227,7 +282,7 @@ var __DshNocturneModule = (() => {
     window: { x: 0.5, y: 0.5, columns: 3, rows: 2, softness: 0.15, slant: 0 }
   };
   var theme = () => THEMES[SETTINGS.theme];
-  var paper = () => PAPERS[SETTINGS.paper];
+  var paper = () => paperFor(SETTINGS.paper);
   function washColor() {
     const p = paper();
     const t = theme();
@@ -1680,7 +1735,7 @@ void main() {
   var CURSORS = [["ink", "墨迹"], ["quill", "羽毛"], ["none", "原生"]];
   var SCROLLS = [["clip", "纸夹"], ["bar", "细杆"], ["native", "原生"]];
   var FINISHES = [["silver", "银"], ["brass", "黄铜"], ["gold", "金"], ["black", "黑"]];
-  var COEXISTS = [["auto", "自动"], ["material", "只叠材质"], ["full", "接管配色"]];
+  var COEXISTS = [["auto", "自动适配"], ["material", "只叠材质"], ["full", "接管配色"]];
   var SLIDERS = [
     ["intensity", "灯强", 0, 2, 0.05, (v) => Math.round(v * 100) + "%"],
     ["spread", "光锥", 20, 160, 1, (v) => Math.round(v) + "°"],
@@ -1729,7 +1784,7 @@ void main() {
       }, name2))
     );
   }
-  function PaperGrid({ value, onChange }) {
+  function PaperGrid({ value, onChange, colorOf }) {
     return h(
       "div",
       { className: "dn-paper-grid", role: "group", "aria-label": "纸张" },
@@ -1745,7 +1800,7 @@ void main() {
             if (value !== id) onChange(id);
           }
         },
-        h("span", { className: "dn-paper-swatch", style: { backgroundColor: PAPERS[id].paper }, "aria-hidden": "true" }),
+        h("span", { className: "dn-paper-swatch", style: { backgroundColor: colorOf(id) }, "aria-hidden": "true" }),
         h("span", { className: "dn-paper-name" }, name2)
       ))
     );
@@ -1798,7 +1853,7 @@ void main() {
         {
           className: "dn-settings",
           "data-dn-settings": "",
-          "data-appearance": PAPERS[settings.paper].appearance
+          "data-appearance": options.appearance()
         },
         h(
           "header",
@@ -1816,7 +1871,7 @@ void main() {
           h(
             Row,
             { id: "paper", title: "纸张", description: "决定纸色、墨色、纤维与做旧纹理。", block: true },
-            h(PaperGrid, { value: settings.paper, onChange: (value) => change("paper", value) })
+            h(PaperGrid, { value: settings.paper, onChange: (value) => change("paper", value), colorOf: options.paperColor })
           ),
           h(
             Row,
@@ -2137,9 +2192,32 @@ void main() {
     return null;
   }
   function tokenMode() {
-    if (SETTINGS.coexist === "full") return "full";
     if (SETTINGS.coexist === "material") return "material";
-    return foreignSkin() ? "material" : "full";
+    return "full";
+  }
+  function detectHostAppearance() {
+    try {
+      for (const node of [document.documentElement, document.body]) {
+        if (!node) continue;
+        for (const name2 of ["data-ds-dark-theme", "data-dark-theme"]) {
+          if (!node.hasAttribute(name2)) continue;
+          const value = node.getAttribute(name2);
+          if (value !== "false" && value !== "light") return "dark";
+        }
+        const theme2 = node.getAttribute("data-theme") || node.getAttribute("data-appearance");
+        if (theme2 && /dark/i.test(theme2)) return "dark";
+        if (theme2 && /light/i.test(theme2)) return "light";
+        if (node.classList && (node.classList.contains("dark") || node.classList.contains("theme-dark"))) return "dark";
+      }
+      const rootScheme = getComputedStyle(document.documentElement).colorScheme || "";
+      const bodyScheme = document.body ? getComputedStyle(document.body).colorScheme || "" : "";
+      const scheme = bodyScheme || rootScheme;
+      if (/dark/i.test(scheme) && !/light/i.test(scheme)) return "dark";
+      if (/light/i.test(scheme) && !/dark/i.test(scheme)) return "light";
+      if (window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches) return "dark";
+    } catch (error) {
+    }
+    return "light";
   }
   function watchWhite() {
     const hits = [];
@@ -2329,16 +2407,100 @@ void main() {
     }
     return { total: names.size, bright };
   }
+  function mixHex(from, to, amount) {
+    const a = toUnit(from);
+    const b = toUnit(to);
+    const channels = [0, 1, 2].map((i) => Math.round((a[i] * (1 - amount) + b[i] * amount) * 255));
+    return "#" + channels.map((v) => Math.max(0, Math.min(255, v)).toString(16).padStart(2, "0")).join("");
+  }
+  function rgbaHex(hex, alpha) {
+    const channels = toUnit(hex).map((v) => Math.round(v * 255));
+    return "rgba(" + channels.join(", ") + ", " + alpha + ")";
+  }
   function tokenMap(p) {
     const dark = p.appearance === "dark";
+    const layers = {
+      one: dark ? mixHex(p.paper, "#ffffff", 0.045) : mixHex(p.paper, "#000000", 0.035),
+      two: dark ? mixHex(p.paper, "#000000", 0.035) : mixHex(p.paper, "#000000", 0.07),
+      three: dark ? mixHex(p.paper, "#ffffff", 0.075) : mixHex(p.paper, "#ffffff", 0.025),
+      four: dark ? mixHex(p.paper, "#ffffff", 0.105) : mixHex(p.paper, "#ffffff", 0.05)
+    };
+    const state = dark ? {
+      brand: "#c9a45c",
+      brandHover: "#d9b878",
+      error: "#d88a9a",
+      success: "#9cc3a4",
+      warn: "#e2cf9a",
+      business: "#8ea8e0",
+      idle: "#8f89a6"
+    } : {
+      brand: "#8a6529",
+      brandHover: "#a27b3b",
+      error: "#9c3a2a",
+      success: "#4c6b2f",
+      warn: "#8a6a1c",
+      business: "#2f5277",
+      idle: "#7d7264"
+    };
+    const ink = p.ink;
+    const primaryForeground = p.paper;
+    const overlayText = dark ? p.ink : "#f7efdd";
     return {
       "--dsw-alias-bg-base": p.paper,
-      "--dsw-alias-bg-module-platform": p.paper,
-      "--dsw-alias-bg-layer-1": dark ? "#242028" : "#eadcb9",
-      "--dsw-alias-bg-layer-2": dark ? "#1a171d" : "#e6d5b0",
-      "--dsw-alias-label-primary": p.ink,
+      "--dsw-alias-bg-module-platform": layers.one,
+      "--dsw-alias-bg-layer-1": layers.one,
+      "--dsw-alias-bg-layer-2": layers.two,
+      "--dsw-alias-bg-layer-3": layers.three,
+      "--dsw-alias-bg-layer-4": layers.four,
+      "--dsw-alias-bg-overlay": layers.three,
+      "--dsw-alias-bg-mask-1": dark ? "rgba(0, 0, 0, .58)" : "rgba(32, 24, 16, .28)",
+      "--dsw-alias-bg-document-selection": p.selection,
+      "--dsw-alias-label-primary": ink,
       "--dsw-alias-label-secondary": p.inkMuted,
-      "--dsw-alias-label-tertiary": dark ? "#8f89a6" : "#7d7264",
+      "--dsw-alias-label-tertiary": p.inkFaint,
+      "--dsw-alias-label-dimmed": p.inkFaint,
+      "--dsw-alias-label-caption": p.inkFaint,
+      "--dsw-alias-label-shimmer": rgbaHex(ink, 0.18),
+      "--dsw-alias-label-error": state.error,
+      "--dsw-alias-label-primary-foreground": primaryForeground,
+      "--dsw-alias-link": state.business,
+      "--dsw-alias-menu-icon": p.inkMuted,
+      "--dsw-alias-border-l1": rgbaHex(ink, dark ? 0.1 : 0.12),
+      "--dsw-alias-border-l2": rgbaHex(ink, dark ? 0.18 : 0.18),
+      "--dsw-alias-border-l3": rgbaHex(ink, dark ? 0.28 : 0.26),
+      "--dsw-alias-border-l4": rgbaHex(ink, dark ? 0.38 : 0.34),
+      "--dsw-alias-border-l2-darkmode-thin": rgbaHex(ink, dark ? 0.12 : 0.16),
+      "--dsw-alias-brand-primary": state.brand,
+      "--dsw-alias-button-primary-fill": state.brand,
+      "--dsw-alias-button-primary-hover": state.brandHover,
+      "--dsw-alias-button-ghost-active-fill": rgbaHex(state.brand, 0.16),
+      "--dsw-alias-button-ghost-active-border": rgbaHex(state.brand, 0.46),
+      "--dsw-alias-button-tool-bar-fill": layers.two,
+      "--dsw-alias-interactive-bg-hover": rgbaHex(ink, 0.06),
+      "--dsw-alias-interactive-bg-active": rgbaHex(ink, 0.11),
+      "--dsw-alias-interactive-bg-hover-danger": rgbaHex(state.error, 0.12),
+      "--dsw-alias-state-success-primary": state.success,
+      "--dsw-alias-state-success-tertiary": rgbaHex(state.success, 0.16),
+      "--dsw-alias-state-warn-primary": state.warn,
+      "--dsw-alias-state-warn-tertiary": rgbaHex(state.warn, 0.16),
+      "--dsw-alias-state-warn-label": state.warn,
+      "--dsw-alias-state-error-primary": state.error,
+      "--dsw-alias-state-business-primary": state.business,
+      "--dsw-alias-state-idle-primary": state.idle,
+      "--dsw-alias-markdown-code-block": layers.two,
+      "--dsw-alias-markdown-code-block-banner": layers.one,
+      "--dsw-alias-markdown-inline-code": layers.two,
+      "--dsw-alias-markdown-tag": rgbaHex(state.brand, 0.16),
+      "--dsw-alias-code-diff-added": rgbaHex(state.success, 0.15),
+      "--dsw-alias-code-diff-deleted": rgbaHex(state.error, 0.14),
+      "--dsw-alias-scrollbar-bg-l2": rgbaHex(ink, dark ? 0.16 : 0.18),
+      "--dsw-alias-scrollbar-hover-l2": rgbaHex(ink, dark ? 0.3 : 0.3),
+      "--dsw-alias-switch-thumb": dark ? mixHex(p.paper, "#ffffff", 0.78) : p.paper,
+      "--dsw-alias-tooltip-bg": dark ? layers.four : "#2b231c",
+      "--dsw-alias-tooltip-key-bg": dark ? layers.three : "#3a2f27",
+      "--dsw-alias-toast-bg": dark ? layers.four : "#2b231c",
+      "--dsw-alias-toast-label": overlayText,
+      "--dsw-alias-menu-group-header-fill": rgbaHex(p.paper, 0.94),
       "--dn-paper": p.paper,
       "--dn-ink": p.ink,
       "--dn-caret-ink": p.cursor,
@@ -2346,7 +2508,6 @@ void main() {
       "--dn-metal-hi": "#f3dca4",
       "--dn-metal": "#b8904c",
       "--dn-sheet": p.paper,
-      // 选区底色：纸自己的调子（浅色纸取描金，深色纸取月白）
       "--dn-selection": washColor(),
       "--dsh-font-family-text": '"EB Garamond", "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, "Source Han Serif SC", "Songti SC", "Noto Serif CJK SC", serif',
       "--dsh-font-family-code": '"Courier Prime", "IBM Plex Mono", "Courier New", "DejaVu Sans Mono", ui-monospace, monospace'
@@ -2422,6 +2583,8 @@ void main() {
   }
   function mount() {
     if (document.querySelector("canvas[" + PAPER_ATTR + "]")) return;
+    let hostAppearance = detectHostAppearance();
+    setPaperAppearance(hostAppearance);
     readSettings();
     injectStyle();
     const paperCanvas = document.createElement("canvas");
@@ -2568,6 +2731,32 @@ void main() {
     }
     const observer = new ResizeObserver(reposition);
     observer.observe(document.documentElement);
+    const onHostAppearanceChange = () => {
+      const next = detectHostAppearance();
+      if (next === hostAppearance || stopped) return;
+      hostAppearance = next;
+      setPaperAppearance(hostAppearance);
+      applyTokens();
+      scrollClip.apply();
+      caret.hide();
+      needsBuild = true;
+      needsLight = true;
+      lastPaintAt = 0;
+      notifySettings();
+      reposition();
+    };
+    const appearanceObserver = new MutationObserver(onHostAppearanceChange);
+    for (const node of [document.documentElement, document.body]) {
+      if (node) appearanceObserver.observe(node, {
+        attributes: true,
+        attributeFilter: ["data-ds-dark-theme", "data-dark-theme", "data-theme", "data-appearance", "class"]
+      });
+    }
+    const colorSchemeQuery = window.matchMedia ? window.matchMedia("(prefers-color-scheme: dark)") : null;
+    if (colorSchemeQuery) {
+      if (typeof colorSchemeQuery.addEventListener === "function") colorSchemeQuery.addEventListener("change", onHostAppearanceChange);
+      else if (typeof colorSchemeQuery.addListener === "function") colorSchemeQuery.addListener(onHostAppearanceChange);
+    }
     const onSelection = () => {
       needsLight = true;
     };
@@ -2734,6 +2923,8 @@ void main() {
       state: () => SETTINGS,
       foreign: foreignSkin,
       resolvedCoexist: tokenMode,
+      appearance: () => paper().appearance,
+      paperColor: (id) => paperFor(id).paper,
       revision: () => settingsRevision,
       subscribe(listener) {
         settingsListeners.add(listener);
@@ -2857,6 +3048,11 @@ void main() {
         frameId = 0;
       }
       observer.disconnect();
+      appearanceObserver.disconnect();
+      if (colorSchemeQuery) {
+        if (typeof colorSchemeQuery.removeEventListener === "function") colorSchemeQuery.removeEventListener("change", onHostAppearanceChange);
+        else if (typeof colorSchemeQuery.removeListener === "function") colorSchemeQuery.removeListener(onHostAppearanceChange);
+      }
       window.removeEventListener("resize", reposition);
       document.removeEventListener("selectionchange", onSelection);
       document.removeEventListener("visibilitychange", onVisibility);

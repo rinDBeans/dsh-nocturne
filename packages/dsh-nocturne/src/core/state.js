@@ -12,25 +12,63 @@ const NIGHT_ANSI = {
   lightBlack:'#6f7192', lightRed:'#eba5b3', lightGreen:'#b4d8bc', lightYellow:'#efdfb2',
   lightBlue:'#aac0ef', lightMagenta:'#cbb5ef', lightCyan:'#a8dbe6', lightWhite:'#f0f0fa'
 };
-const lightPaper = (id, name, paperColor, surface) => ({
-  id, name, appearance:'light', paper:paperColor,
-  ink:'#2a2019', inkMuted:'#6b5f52', cursor:'#3a2c20',
-  selection:'rgba(52, 64, 112, 0.2)', ansi:LIGHT_ANSI, surface
-});
+const LIGHT_INK = {
+  ink:'#2a2019', inkMuted:'#6b5f52', inkFaint:'#8a7d6b', cursor:'#3a2c20',
+  selection:'rgba(52, 64, 112, 0.2)'
+};
+const DARK_INK = {
+  ink:'#ece6db', inkMuted:'#aaa193', inkFaint:'#7a7165', cursor:'#f2eadb',
+  selection:'rgba(196, 188, 255, 0.20)'
+};
+
+function paperVariant(id, name, appearance, paper, ink, surface) {
+  return {id, name, appearance, paper, surface, ansi:appearance === 'dark' ? NIGHT_ANSI : LIGHT_ANSI, ...ink};
+}
+function paperEntry(id, name, nativeAppearance, surface, light, dark) {
+  const lightVariant = paperVariant(id, name, 'light', light.paper, {...LIGHT_INK, ...light}, surface);
+  const darkVariant = paperVariant(id, name, 'dark', dark.paper, {...DARK_INK, ...dark}, surface);
+  return {
+    ...(nativeAppearance === 'dark' ? darkVariant : lightVariant),
+    id, name, nativeAppearance,
+    variants:{light:lightVariant, dark:darkVariant}
+  };
+}
 
 const PAPERS = {
-  cotton: lightPaper('cotton', 'Cotton', '#eee6d5', {crinkle:.3, felt:1, laid:0, linen:0, mottle:.08, age:0}),
-  laid: lightPaper('laid', 'Laid', '#f1e9d6', {crinkle:.22, felt:0, laid:1, linen:0, mottle:.18, age:0}),
-  linen: lightPaper('linen', 'Linen', '#ebe5d8', {crinkle:.2, felt:0, laid:0, linen:1, mottle:.08, age:0}),
-  onionskin: lightPaper('onionskin', 'Onionskin', '#f2f1ea', {crinkle:.08, felt:0, laid:0, linen:0, mottle:.04, age:0}),
-  parchment: lightPaper('parchment', 'Parchment', '#efdfbd', {crinkle:.25, felt:0, laid:0, linen:0, mottle:1, age:.75}),
-  night: {
-    id:'night', name:'Night', appearance:'dark', paper:'#1d1a20',
-    ink:'#e6e1ea', inkMuted:'#9a94a6', cursor:'#e9e7ff',
-    selection:'rgba(196, 188, 255, 0.2)', ansi:NIGHT_ANSI,
-    surface:{crinkle:.3, felt:0, laid:0, linen:0, mottle:.1, age:0}
-  }
+  cotton: paperEntry('cotton', 'Cotton', 'light',
+    {crinkle:.3, felt:1, laid:0, linen:0, mottle:.08, age:0},
+    {paper:'#eee6d5'},
+    {paper:'#26231e', ink:'#eee6d8', inkMuted:'#aaa08f', inkFaint:'#796f61'}),
+  laid: paperEntry('laid', 'Laid', 'light',
+    {crinkle:.22, felt:0, laid:1, linen:0, mottle:.18, age:0},
+    {paper:'#f1e9d6'},
+    {paper:'#29251d', ink:'#efe6d4', inkMuted:'#ad9f87', inkFaint:'#796d5b'}),
+  linen: paperEntry('linen', 'Linen', 'light',
+    {crinkle:.2, felt:0, laid:0, linen:1, mottle:.08, age:0},
+    {paper:'#ebe5d8'},
+    {paper:'#24231f', ink:'#ebe7da', inkMuted:'#a7a191', inkFaint:'#716b5f'}),
+  onionskin: paperEntry('onionskin', 'Onionskin', 'light',
+    {crinkle:.08, felt:0, laid:0, linen:0, mottle:.04, age:0},
+    {paper:'#f2f1ea'},
+    {paper:'#232325', ink:'#e9e7e2', inkMuted:'#a8a49e', inkFaint:'#74716c'}),
+  parchment: paperEntry('parchment', 'Parchment', 'light',
+    {crinkle:.25, felt:0, laid:0, linen:0, mottle:1, age:.75},
+    {paper:'#efdfbd'},
+    {paper:'#2d2419', ink:'#efe2c8', inkMuted:'#b29c7b', inkFaint:'#7d6b53'}),
+  night: paperEntry('night', 'Night', 'dark',
+    {crinkle:.3, felt:0, laid:0, linen:0, mottle:.1, age:0},
+    {paper:'#e9e6f0', ink:'#282435', inkMuted:'#655f78', inkFaint:'#948da5', cursor:'#312b45', selection:'rgba(112,96,160,.22)'},
+    {paper:'#1d1a20', ink:'#e6e1ea', inkMuted:'#9a94a6', inkFaint:'#6f7192', cursor:'#e9e7ff', selection:'rgba(196,188,255,.20)'})
 };
+
+let PAPER_APPEARANCE = 'light';
+function setPaperAppearance(appearance) {
+  PAPER_APPEARANCE = appearance === 'dark' ? 'dark' : 'light';
+}
+function paperFor(id) {
+  const base = PAPERS[id] || PAPERS.parchment;
+  return base.variants[PAPER_APPEARANCE];
+}
 
 const THEMES = {
   'paper-and-ink': {
@@ -91,7 +129,7 @@ const SETTINGS = {
   window:{x:.5, y:.5, columns:3, rows:2, softness:.15, slant:0}
 };
 const theme = () => THEMES[SETTINGS.theme];
-const paper = () => PAPERS[SETTINGS.paper];
+const paper = () => paperFor(SETTINGS.paper);
 
 /**
  * 选区的底色：纸自己的调子，不是浏览器的蓝。
@@ -126,4 +164,4 @@ const NOCTURNE_DEFAULTS = JSON.parse(JSON.stringify(SETTINGS));
    2 · 小工具
    ═══════════════════════════════════════════════════════════════════════ */
 
-export {LIGHT_ANSI, NIGHT_ANSI, PAPERS, THEMES, SETTINGS, NOCTURNE_DEFAULTS, theme, paper, washColor, surfaceColor};
+export {LIGHT_ANSI, NIGHT_ANSI, PAPERS, THEMES, SETTINGS, NOCTURNE_DEFAULTS, theme, paper, paperFor, setPaperAppearance, washColor, surfaceColor};

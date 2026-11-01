@@ -141,8 +141,14 @@ test('native settings section renders and operates all control families', option
   assert.equal(await page.evaluate(() => window.__dshNocturne.settings.diagnostics), true);
 
   await page.locator('[data-setting="paper"] button', {hasText: '夜纸'}).click();
+  await page.waitForFunction(() => document.documentElement.style.getPropertyValue('--dsw-alias-bg-base') === '#e9e6f0');
+  assert.equal(await page.locator('.dn-settings').getAttribute('data-appearance'), 'light');
+  await page.evaluate(() => document.documentElement.setAttribute('data-ds-dark-theme', ''));
+  await page.waitForFunction(() => document.documentElement.style.getPropertyValue('--dsw-alias-bg-base') === '#1d1a20');
   assert.equal(await page.locator('.dn-settings').getAttribute('data-appearance'), 'dark');
   assert.equal(await page.locator('.dn-slider-range').first().evaluate((range) => getComputedStyle(range).getPropertyValue('--dn-slider-fill').trim()), '#c4b8db');
+  await page.evaluate(() => document.documentElement.removeAttribute('data-ds-dark-theme'));
+  await page.waitForFunction(() => document.documentElement.style.getPropertyValue('--dsw-alias-bg-base') === '#e9e6f0');
 
   await page.locator('[data-setting="coexist"] button', {hasText: '只叠材质'}).click();
   assert.equal(await page.evaluate(() => document.documentElement.style.getPropertyValue('--dsw-alias-bg-base')), '');

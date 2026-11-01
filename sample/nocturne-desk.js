@@ -1,4 +1,4 @@
-import {SETTINGS, NOCTURNE_DEFAULTS, PAPERS, THEMES, theme, paper, washColor, surfaceColor, clamp, smoothstep, toUnit, norm, dot3, spreadToCosine, reduceMotion, barHalfWidth, between, windowGobo, irradiance, toneMap, lightAmount, referenceExposure, buildRig, ambientLevel, VERTEX, SURFACE, LIGHT, PaperLight, GlowLayer, poolColor, InkCaret, buildQuill, buildStudio, ScrollClip, CLIP_FINISHES, stepSpring} from '../packages/dsh-nocturne/src/core/index.js';
+import {SETTINGS, NOCTURNE_DEFAULTS, PAPERS, THEMES, theme, paper, setPaperAppearance, washColor, surfaceColor, clamp, smoothstep, toUnit, norm, dot3, spreadToCosine, reduceMotion, barHalfWidth, between, windowGobo, irradiance, toneMap, lightAmount, referenceExposure, buildRig, ambientLevel, VERTEX, SURFACE, LIGHT, PaperLight, GlowLayer, poolColor, InkCaret, buildQuill, buildStudio, ScrollClip, CLIP_FINISHES, stepSpring} from '../packages/dsh-nocturne/src/core/index.js';
 
 /* ═══════════════════════════════════════════════════════════════════════════
    6 · 装配与主循环
@@ -33,6 +33,9 @@ try {
     inputEl.setSelectionRange(at, at);
   }
 } catch (error) { /* 老浏览器：走默认 */ }
+
+// 样张没有 DSH 宿主明暗，仍按纸张自身的原生身份渲染。
+setPaperAppearance(PAPERS[SETTINGS.paper].nativeAppearance || 'light');
 
 const paperLight = new PaperLight(paperCanvas);
 const glow = new GlowLayer(glowCanvas);
@@ -142,6 +145,7 @@ function paintFrame(now) {
 /** 换纸：纸色、墨色、描边、强调色一起换。 */
 function applyPaper(id) {
   SETTINGS.paper = id;
+  setPaperAppearance(PAPERS[id].nativeAppearance || 'light');
   const p = paper();
   rootStyle.setProperty('--paper', p.paper);
   rootStyle.setProperty('--ink', p.ink);

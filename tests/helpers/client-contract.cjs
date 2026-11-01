@@ -9,7 +9,7 @@ const adapter = fs.readFileSync(adapterPath, 'utf8');
 const prefix = adapter.slice(0, adapter.indexOf('function mount()'));
 const exposure = [
   'globalThis.contract = {',
-  'SETTINGS, NOCTURNE_DEFAULTS, PAPERS, THEMES, PaperLight,',
+  'SETTINGS, NOCTURNE_DEFAULTS, PAPERS, THEMES, PaperLight, paperFor, setPaperAppearance,',
   'applyTokens, tokenMode, mergeSettings, normalize, snapshot,',
   'restoreOwnedStyles',
   '};'
