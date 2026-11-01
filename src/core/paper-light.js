@@ -24,7 +24,7 @@ class PaperLight {
       this.gl.bufferData(this.gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), this.gl.STATIC_DRAW);
       this.gl.enableVertexAttribArray(0);
       this.gl.vertexAttribPointer(0, 2, this.gl.FLOAT, false, 0, 0);
-      this.su = this.locate(this.surfaceProgram, ['uSize','uScale','uSeed','uFold','uFelt','uAge','uMottle','uCrinkle','uLaid','uLinen','uPaper']);
+      this.su = this.locate(this.surfaceProgram, ['uSize','uScale','uSeed','uFold','uFelt','uAge','uMottle','uCrinkle','uLaid','uLinen','uPaper','uTexture']);
       this.lu = this.locate(this.lightProgram, ['uAlbedo','uNormal','uSize','uScale','uSource','uLightPos','uLightDir','uCone','uExposure','uWindow','uPanes','uTint','uLamp','uAmbient','uAmbientTint','uRelief','uCrinkle','uGrain','uTime','uSoft']);
       this.state = 'ready';
       return true;
@@ -102,12 +102,15 @@ class PaperLight {
     // 纸纹的低频结构按纸的物理尺寸缩放：TN 的着色器是按 ~660×620 的纸调的，
     // 同样的频率铺到 1200px 的纸上，斑块就碎成了噪点。
     gl.uniform1f(u.uPaper, clamp(Math.sqrt(spec.width * spec.height) / 700, 0.9, 1.9));
+    // 每张纸的结构参数原样送进去，强弱只由 uTexture 一个数决定。
+    // 以前把 texture 乘在 laid/linen 上、却不乘基础噪声，纸纹调低时纸就不再是它自己。
+    gl.uniform1f(u.uTexture, SETTINGS.texture);
     gl.uniform1f(u.uFelt, paperDef.surface.felt);
     gl.uniform1f(u.uAge, paperDef.surface.age);
     gl.uniform1f(u.uMottle, paperDef.surface.mottle);
-    gl.uniform1f(u.uCrinkle, paperDef.surface.crinkle * SETTINGS.texture);
-    gl.uniform1f(u.uLaid, paperDef.surface.laid * Math.min(1, SETTINGS.texture));
-    gl.uniform1f(u.uLinen, paperDef.surface.linen * Math.min(1, SETTINGS.texture));
+    gl.uniform1f(u.uCrinkle, paperDef.surface.crinkle);
+    gl.uniform1f(u.uLaid, paperDef.surface.laid);
+    gl.uniform1f(u.uLinen, paperDef.surface.linen);
     gl.drawArrays(gl.TRIANGLES, 0, 3);
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
   }
@@ -144,7 +147,8 @@ class PaperLight {
     gl.uniform3f(u.uAmbientTint, tintChannel(room[0]), tintChannel(room[1]), tintChannel(room[2]));
     gl.uniform1f(u.uRelief, 2 * SETTINGS.paperIllumination);
     gl.uniform1f(u.uSoft, SETTINGS.beam === 'soft' ? 1 : 0);
-    gl.uniform1f(u.uCrinkle, paperDef.surface.crinkle * SETTINGS.texture);
+    // 法线里已经带了纸纹振幅，这里再用一次材质本身的褶皱，不能重复乘 texture。
+    gl.uniform1f(u.uCrinkle, paperDef.surface.crinkle);
     gl.uniform1f(u.uGrain, reduceMotion ? 0 : SETTINGS.grain);
     gl.uniform1f(u.uTime, time);
     gl.drawArrays(gl.TRIANGLES, 0, 3);

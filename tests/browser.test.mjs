@@ -30,6 +30,34 @@ const shell = [
   '<script src="/client.js"></script></body></html>'
 ].join('');
 
+/**
+ * 纸纹振幅的契约：每张纸的结构参数（laid/linen/felt/…）必须原样送到 GPU，
+ * 全局强弱只由 uTexture 一个数决定。早先 texture 被提前乘进 laid/linen 里，
+ * 于是把纸纹调低就不再是"这张纸变平滑"，而是"这张纸变成葱皮纸"。
+ */
+const uniformShell = [
+  '<!doctype html><html><head><meta charset="utf-8"><style>body{margin:0}</style></head><body>',
+  '<div id="editor" contenteditable="true">输入文字</div>',
+  '<script>',
+  'window.__dnUniforms = {};',
+  'const names = new WeakMap();',
+  'const P = WebGL2RenderingContext.prototype;',
+  'const getLocation = P.getUniformLocation;',
+  'P.getUniformLocation = function (program, name) {',
+  '  const location = getLocation.call(this, program, name);',
+  '  if (location) names.set(location, name);',
+  '  return location;',
+  '};',
+  'const set1f = P.uniform1f;',
+  'P.uniform1f = function (location, value) {',
+  '  if (location && names.has(location)) window.__dnUniforms[names.get(location)] = value;',
+  '  return set1f.call(this, location, value);',
+  '};',
+  'window.__ModuleLoader__ = {load(def){ window.__plugin = def.factory(() => ({})); }};',
+  '</script>',
+  '<script src="/client.js"></script></body></html>'
+].join('');
+
 const settingsShell = [
   '<!doctype html><html><head><meta charset="utf-8"><style>',
   ':root{--dsw-font-family:Inter,system-ui,sans-serif;--dsw-alias-brand-primary:#b8904c;--dsw-alias-bg-overlay:#fff;--dsw-alias-bg-layer-1:#f7f4ed;--dsw-alias-bg-layer-2:#fff;--dsw-alias-bg-layer-3:#fff;--dsw-alias-label-primary:#28241f;--dsw-alias-label-secondary:#6f675d;--dsw-alias-label-tertiary:#8a8177;--dsw-alias-label-caption:#9a9187;--dsw-alias-border-l1:#e4ded4;--dsw-alias-border-l2:#d4cabc;--dsw-specific-selector:#ece7de;--dsw-alias-interactive-bg-hover:#00000008;--dsw-radius-md:6px}',
@@ -77,6 +105,11 @@ before(async () => {
     if (pathname === '/host-shell') {
       res.writeHead(200, {'content-type': 'text/html; charset=utf-8'});
       res.end(hostShell);
+      return;
+    }
+    if (pathname === '/uniform-shell') {
+      res.writeHead(200, {'content-type': 'text/html; charset=utf-8'});
+      res.end(uniformShell);
       return;
     }
     if (pathname === '/client.js' || pathname === '/react.js' || pathname === '/react-dom.js') {
@@ -511,6 +544,45 @@ test('paper reaches surfaces painted from the host body-level token table', opti
   assert.equal(dark.rightbar, dark.want);
   assert.ok(closeTo(dark.sidebar, dark.want), 'dark sidebar must sit on paper: ' + dark.sidebar);
   assert.equal(dark.body, dark.want);
+
+  await assertBrowserClean(page, errors);
+  await context.close();
+});
+
+test('paper texture strength scales the sheet instead of erasing each paper identity', options, async () => {
+  const context = await browser.newContext({viewport: {width: 800, height: 600}});
+  const page = await context.newPage();
+  const errors = [];
+  page.on('pageerror', (error) => errors.push(String(error)));
+  await page.goto(origin + '/uniform-shell');
+  await page.waitForFunction(() => Boolean(window.__dshNocturne));
+  await page.waitForTimeout(400);
+
+  const uniformsAfter = async (paper, texture) => {
+    await page.evaluate(() => { window.__dnUniforms = {}; });
+    await page.evaluate(([id, strength]) => window.__dshNocturne.use(id, {texture: strength}), [paper, texture]);
+    await page.waitForFunction(() => window.__dnUniforms.uTexture !== undefined, null, {timeout: 5000});
+    return page.evaluate(() => ({...window.__dnUniforms}));
+  };
+
+  const laidFull = await uniformsAfter('laid', 1);
+  assert.equal(laidFull.uLaid, 1, '帘纹纸的帘线参数必须原样送到 GPU');
+  assert.equal(laidFull.uLinen, 0);
+  assert.equal(laidFull.uTexture, 1);
+
+  // 关键回归：调低纸纹深度时，纸自己的结构参数不能被一起削掉——
+  // 之前 texture 被提前乘进 laid/linen，26% 的帘纹纸和葱皮纸几乎无法区分。
+  const laidFaint = await uniformsAfter('laid', 0.25);
+  assert.equal(laidFaint.uLaid, 1, '降低纸纹深度不能把帘线参数也乘掉，否则帘纹纸退化成葱皮纸');
+  assert.equal(laidFaint.uTexture, 0.25);
+
+  const linenFaint = await uniformsAfter('linen', 0.25);
+  assert.equal(linenFaint.uLinen, 1);
+  assert.equal(linenFaint.uTexture, 0.25);
+
+  const cottonFaint = await uniformsAfter('cotton', 0.25);
+  assert.equal(cottonFaint.uFelt, 1, '棉浆纸的纤维参数同样不能被纸纹深度乘掉');
+  assert.equal(cottonFaint.uTexture, 0.25);
 
   await assertBrowserClean(page, errors);
   await context.close();

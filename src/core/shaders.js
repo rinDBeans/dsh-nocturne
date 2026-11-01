@@ -15,7 +15,7 @@ const SURFACE = `#version 300 es
 precision highp float;
 uniform vec2 uSize; uniform float uScale; uniform float uSeed; uniform float uFold; uniform float uFelt;
 uniform float uAge; uniform float uMottle; uniform float uCrinkle; uniform float uLaid; uniform float uLinen;
-uniform float uPaper;
+uniform float uPaper; uniform float uTexture;
 layout(location = 0) out vec4 outAlbedo;
 layout(location = 1) out vec4 outNormal;
 ${NOISE}
@@ -64,13 +64,13 @@ vec3 albedo(vec2 p) {
   float fold = (p.y - uFold) / 2.5;
   tone *= 1.0 - 0.08 * exp(-fold * fold) + 0.03 * exp(-(fold - 2.2) * (fold - 2.2));
   float chainTone = exp(-pow((mod(p.x, 96.0) - 48.0) / 3.2, 2.0));
-  base *= 1.0 - uLaid * (0.03 * chainTone + 0.005 * (0.5 + 0.5 * sin(p.y * 6.2831 / 4.2)));
-  base *= 1.0 - uLinen * 0.02 * (0.5 + 0.5 * sin(p.x * 6.2831 / 3.4) * sin(p.y * 6.2831 / 3.4));
+  base *= 1.0 - uLaid * uTexture * (0.03 * chainTone + 0.005 * (0.5 + 0.5 * sin(p.y * 6.2831 / 4.2)));
+  base *= 1.0 - uLinen * uTexture * 0.02 * (0.5 + 0.5 * sin(p.x * 6.2831 / 3.4) * sin(p.y * 6.2831 / 3.4));
   if (uFelt > 0.0) {
     vec2 q = TURN * p;
     float threads = smoothstep(0.86, 0.97, noise(q * vec2(0.06, 1.1) + uSeed));
     threads += smoothstep(0.86, 0.97, noise(TURN * q * vec2(1.1, 0.06) + 3.0));
-    base *= 1.0 - uFelt * 0.035 * min(1.0, threads);
+    base *= 1.0 - uFelt * uTexture * 0.035 * min(1.0, threads);
   }
   return base * mix(vec3(1.0), tone, uAge);
 }
@@ -79,7 +79,11 @@ void main() {
   float e = 0.9;
   float h0 = relief(p);
   float slope = 1.2 + 3.0 * uCrinkle;
-  vec3 n = normalize(vec3(-(relief(p + vec2(e, 0.0)) - h0) * slope, -(relief(p + vec2(0.0, e)) - h0) * slope, 1.0));
+  // 纸纹深度只做一件事：整体缩放起伏的振幅。
+  // 早先它只乘在 laid/linen/crinkle 上，共用的基础噪声不乘——于是调低之后，
+  // 每张纸自己的帘线、布纹先被抹掉，剩下的都是同一层噪声，六张纸看起来全成了葱皮纸。
+  float amp = uTexture;
+  vec3 n = normalize(vec3(-(relief(p + vec2(e, 0.0)) - h0) * slope * amp, -(relief(p + vec2(0.0, e)) - h0) * slope * amp, 1.0));
   outAlbedo = vec4(albedo(p), 1.0);
   outNormal = vec4(n.xy * 0.5 + 0.5, 0.0, 1.0);
 }`;
