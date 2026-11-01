@@ -265,10 +265,10 @@ DSH 桌面版每次启动把 web 服务端口设成 0（随机端口），GUI �
 
 | 路径 | 是什么 |
 | --- | --- |
-| `packages/dsh-nocturne/src/core/` | **渲染真源**：六张纸、灯、光标、滚动条与 Studio |
+| `src/core/` | **渲染真源**：六张纸、灯、光标、滚动条与 Studio |
 | `sample/nocturne-desk.html` | 生成的单文件样张，支持离线打开与深链参数 |
 | `sample/fonts/` | 本地化的 EB Garamond / Courier Prime / Cormorant（附完整 OFL） |
-| `packages/dsh-nocturne/` | DSH 客户端插件；客户端与宿主产物由共享 ES 模块构建 |
+| 仓库根（`package.json`） | DSH 组合包本体：`dsh.bundle` 指向 `cordis.patch.yml`；客户端与宿主产物由共享 ES 模块构建 |
 | `docs/previews/nocturne-*.png` | 三张纸的 headless 渲染 |
 | `docs/previews/dsh-plugin-shell.png` | 插件在模拟 DSH 外壳里装载后的样子 |
 | `docs/previews/ink-cursor.png` / `ink-cursor-dsh.png` | 墨迹光标：样张（input）与插件（contenteditable） |
@@ -281,12 +281,13 @@ DSH 桌面版每次启动把 web 服务端口设成 0（随机端口），GUI �
 ## 6 · 安装插件
 
 ```bash
-cd packages/dsh-nocturne
 node install.cjs --dry-run      # 先看要改什么
 node install.cjs                # 装进 desktop 档案
 # 重启 DSH
 node install.cjs --revert       # 撤掉
 ```
+
+也可以直接在 DSH 的「插件」页填仓库地址 `https://github.com/rinDBeans/dsh-nocturne`，由 DSH 自己把它作为组合包装入。
 
 它只做两件可逆的事：把包拷进档案的 `node_modules`、在 `package.json` 里登记依赖与 bundle
 （装载条目由包自带的 `cordis.patch.yml` 提供，与 dsh-dream-skin 同一套做法）。

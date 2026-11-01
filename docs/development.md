@@ -2,7 +2,7 @@
 
 ## 真源与生成物
 
-渲染真源位于 packages/dsh-nocturne/src/core/：
+仓库根就是包，渲染真源位于 src/core/：
 
 - state.js：纸、房间与默认设置。
 - math.js / light-model.js / shaders.js：数学、光照模型与 GLSL。
@@ -17,8 +17,8 @@ sample/nocturne-desk.template.html 与 sample/nocturne-desk.js 是样张真源�
 以下三个文件均由构建生成，不要直接编辑：
 
     sample/nocturne-desk.html
-    packages/dsh-nocturne/lib/client.js
-    packages/dsh-nocturne/lib/index.js
+    lib/client.js
+    lib/index.js
 
 ## 本地命令
 

@@ -6,8 +6,9 @@ import {dirname, join, relative} from 'node:path';
 import {build} from 'esbuild';
 
 const here = dirname(fileURLToPath(import.meta.url));
-const repo = join(here, '..', '..', '..');
-const pkg = join(here, '..');
+// 包就在仓库根上：tools/ 的上一级同时是包目录与仓库目录。
+const repo = join(here, '..');
+const pkg = repo;
 const check = process.argv.includes('--check');
 const paths = {
   template: join(repo, 'sample', 'nocturne-desk.template.html'),

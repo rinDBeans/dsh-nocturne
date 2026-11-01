@@ -4,7 +4,7 @@ const vm = require('node:vm');
 const {buildSync} = require('esbuild');
 
 const repo = path.resolve(__dirname, '../..');
-const adapterPath = path.join(repo, 'packages/dsh-nocturne/src/adapter.js');
+const adapterPath = path.join(repo, 'src/adapter.js');
 const adapter = fs.readFileSync(adapterPath, 'utf8');
 const prefix = adapter.slice(0, adapter.indexOf('function mount()'));
 const exposure = [

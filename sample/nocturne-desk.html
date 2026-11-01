@@ -649,7 +649,7 @@ tr:last-child td{border-bottom:0}
 
 
 <script>var __NocturneSample = (() => {
-  // packages/dsh-nocturne/src/core/math.js
+  // src/core/math.js
   var clamp = (v, a, b) => Math.min(b, Math.max(a, v));
   var smoothstep = (e0, e1, x) => {
     if (e0 === e1) return x < e0 ? 0 : 1;
@@ -671,7 +671,7 @@ tr:last-child td{border-bottom:0}
   if (typeof motionQuery.addEventListener === "function") motionQuery.addEventListener("change", onMotionChange);
   else if (typeof motionQuery.addListener === "function") motionQuery.addListener(onMotionChange);
 
-  // packages/dsh-nocturne/src/core/state.js
+  // src/core/state.js
   var LIGHT_ANSI = {
     black: "#2b231c",
     red: "#9c3a2a",
@@ -886,7 +886,7 @@ tr:last-child td{border-bottom:0}
   }
   var NOCTURNE_DEFAULTS = JSON.parse(JSON.stringify(SETTINGS));
 
-  // packages/dsh-nocturne/src/core/light-model.js
+  // src/core/light-model.js
   var barHalfWidth = (w, h) => Math.min(16, Math.max(4, 0.04 * Math.min(w, h)));
   function between(offset, cell, bar, soft) {
     const t = offset / cell;
@@ -1004,7 +1004,7 @@ tr:last-child td{border-bottom:0}
     return Math.min(1, Math.max(floor, 1 - theme().light.shade * (0.55 + 0.45 * SETTINGS.intensity)));
   }
 
-  // packages/dsh-nocturne/src/core/shaders.js
+  // src/core/shaders.js
   var VERTEX = `#version 300 es
 in vec2 aPos;
 void main() { gl_Position = vec4(aPos, 0.0, 1.0); }`;
@@ -1138,7 +1138,7 @@ void main() {
   outColor = vec4(clamp(albedo * irr + g * (uGrain * 0.045 + 1.5 / 255.0), 0.0, 1.0), 1.0);
 }`;
 
-  // packages/dsh-nocturne/src/core/paper-light.js
+  // src/core/paper-light.js
   var PaperLight = class {
     constructor(canvas) {
       this.canvas = canvas;
@@ -1303,7 +1303,7 @@ void main() {
     }
   };
 
-  // packages/dsh-nocturne/src/core/glow-layer.js
+  // src/core/glow-layer.js
   var MOTE_HASH = (n) => {
     const s = Math.sin(n * 127.1 + 311.7) * 43758.5453;
     return s - Math.floor(s);
@@ -1461,7 +1461,7 @@ void main() {
     }
   };
 
-  // packages/dsh-nocturne/src/core/quill.js
+  // src/core/quill.js
   var Q_VIEW = { left: 4, top: 74, width: 64, height: 78 };
   var Q_LINES = 1.15;
   var Q_NIB = { x: 0.15, y: 0.84 };
@@ -1630,7 +1630,7 @@ void main() {
     return element;
   }
 
-  // packages/dsh-nocturne/src/core/ink-caret.js
+  // src/core/ink-caret.js
   var measureCanvas = document.createElement("canvas").getContext("2d");
   var BREATH_MS = 1700;
   var REST_MS = 650;
@@ -1953,7 +1953,7 @@ void main() {
     }
   };
 
-  // packages/dsh-nocturne/src/core/studio.js
+  // src/core/studio.js
   var STUDIO_THEMES = [
     { id: "paper-and-ink", name: "纸与墨" },
     { id: "midnight-study", name: "子夜书斋" },
@@ -2206,7 +2206,7 @@ void main() {
     return { element: root, handle, sync };
   }
 
-  // packages/dsh-nocturne/src/core/scroll-clip.js
+  // src/core/scroll-clip.js
   var CLIP_WIDTH = 84;
   var CLIP_HEIGHT = 26;
   var CLIP_EDGE = 88;

@@ -7,7 +7,7 @@ import {fileURLToPath, pathToFileURL} from 'node:url';
 import {chromium} from 'playwright-core';
 
 const repo = fileURLToPath(new URL('..', import.meta.url));
-const clientSource = fs.readFileSync(path.join(repo, 'packages/dsh-nocturne/lib/client.js'), 'utf8');
+const clientSource = fs.readFileSync(path.join(repo, 'lib/client.js'), 'utf8');
 const reactSource = fs.readFileSync(path.join(repo, 'node_modules/react/umd/react.production.min.js'), 'utf8');
 const reactDomSource = fs.readFileSync(path.join(repo, 'node_modules/react-dom/umd/react-dom.production.min.js'), 'utf8');
 const candidates = [

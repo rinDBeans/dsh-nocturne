@@ -1,4 +1,4 @@
-import {SETTINGS, NOCTURNE_DEFAULTS, PAPERS, THEMES, theme, paper, setPaperAppearance, washColor, surfaceColor, clamp, smoothstep, toUnit, norm, dot3, spreadToCosine, reduceMotion, barHalfWidth, between, windowGobo, irradiance, toneMap, lightAmount, referenceExposure, buildRig, ambientLevel, VERTEX, SURFACE, LIGHT, PaperLight, GlowLayer, poolColor, InkCaret, buildQuill, buildStudio, ScrollClip, CLIP_FINISHES, stepSpring} from '../packages/dsh-nocturne/src/core/index.js';
+import {SETTINGS, NOCTURNE_DEFAULTS, PAPERS, THEMES, theme, paper, setPaperAppearance, washColor, surfaceColor, clamp, smoothstep, toUnit, norm, dot3, spreadToCosine, reduceMotion, barHalfWidth, between, windowGobo, irradiance, toneMap, lightAmount, referenceExposure, buildRig, ambientLevel, VERTEX, SURFACE, LIGHT, PaperLight, GlowLayer, poolColor, InkCaret, buildQuill, buildStudio, ScrollClip, CLIP_FINISHES, stepSpring} from '../src/core/index.js';
 
 /* ═══════════════════════════════════════════════════════════════════════════
    6 · 装配与主循环

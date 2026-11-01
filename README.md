@@ -97,8 +97,21 @@ sample/nocturne-desk.html
 
 ### 安装
 
+**方式一：在 DSH 的插件页直接安装（推荐）**
+
+打开侧边栏的「插件」页，填入仓库地址：
+
+```
+https://github.com/rinDBeans/dsh-nocturne
+```
+
+DSH 会拉取仓库，并把本插件作为组合包装入当前 profile。安装完成后**重启 DSH**，即可在「设置 → 缮写室」中看到配置面板。
+
+**方式二：从克隆的仓库本地安装**
+
 ```bash
-cd packages/dsh-nocturne
+git clone https://github.com/rinDBeans/dsh-nocturne.git
+cd dsh-nocturne
 
 # 预检安装变更
 node install.cjs --dry-run
@@ -107,16 +120,13 @@ node install.cjs --dry-run
 node install.cjs
 ```
 
-安装完成后**重启 DSH**，即可在「设置 → 缮写室」中看到配置面板。
-
 ### 卸载
 
 ```bash
-cd packages/dsh-nocturne
 node install.cjs --revert
 ```
 
-> **提示**：卸载脚本具备幂等与干净回滚特性，仅精确移除本插件的注册登记与 bundle，不影响其他插件在 `package.json` 中的后续修改。
+> **提示**：卸载脚本具备幂等与干净回滚特性，仅精确移除本插件的注册登记与 bundle，不影响其他插件在 `package.json` 中的后续修改。从插件页安装的，直接在插件页移除即可。
 
 ---
 
@@ -143,8 +153,10 @@ npm test          # 运行测试（包含基于真实无头 Edge 的多材质渲
 npm run check     # 产物漂移检查与全量测试
 ```
 
-- 核心渲染管线位于 `packages/dsh-nocturne/src/core/`
-- 原生设置页位于 `packages/dsh-nocturne/src/settings-page.js`
+仓库根目录就是插件包：`package.json` 里的 `dsh.bundle` 指向 `cordis.patch.yml`，`lib/` 是构建产物。
+
+- 核心渲染管线位于 `src/core/`
+- 原生设置页位于 `src/settings-page.js`
 - 架构设计、着色器推导与渲染细节参见 [移植与设计说明](docs/nocturne.md) 与 [开发文档](docs/development.md)。
 
 ---

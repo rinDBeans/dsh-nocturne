@@ -5,7 +5,7 @@ const os = require('node:os');
 const path = require('node:path');
 const {spawnSync} = require('node:child_process');
 
-const installer = path.resolve(__dirname, '../packages/dsh-nocturne/install.cjs');
+const installer = path.resolve(__dirname, '../install.cjs');
 
 function fixture(t) {
   const home = fs.mkdtempSync(path.join(os.tmpdir(), 'dsh-nocturne-installer-'));

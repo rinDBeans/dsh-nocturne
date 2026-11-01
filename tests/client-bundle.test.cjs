@@ -4,7 +4,7 @@ const fs = require('node:fs');
 const vm = require('node:vm');
 
 test('generated DSH bundle exposes the expected plugin contract', () => {
-  const source = fs.readFileSync(require.resolve('../packages/dsh-nocturne/lib/client.js'), 'utf8');
+  const source = fs.readFileSync(require.resolve('../lib/client.js'), 'utf8');
   let definition;
   const context = {
     console,

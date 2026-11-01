@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import http from 'node:http';
-import {apply} from '../packages/dsh-nocturne/lib/index.js';
+import {apply} from '../lib/index.js';
 
 async function fixture(t) {
   const home = fs.mkdtempSync(path.join(os.tmpdir(), 'dsh-nocturne-host-'));

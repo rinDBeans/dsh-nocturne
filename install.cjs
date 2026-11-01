@@ -31,6 +31,8 @@ const home = process.env.DSH_HOME || path.join(os.homedir(), '.dsh');
 const profile = path.resolve(home, 'profiles', profileName);
 const packageName = 'dsh-nocturne';
 const source = path.resolve(__dirname);
+/** 装进档案的只有运行时需要的那几项：仓库根就是包，整目录复制会把 tests/、_probe/ 和 .git 一起搬进档案。 */
+const PACKAGE_ENTRIES = ['package.json', 'lib', 'cordis.patch.yml', 'README.md', 'LICENSE'];
 const target = path.join(profile, 'node_modules', packageName);
 const pkgJsonPath = path.join(profile, 'package.json');
 
@@ -142,10 +144,12 @@ let failure = null;
 backup(pkgJsonPath);
 try {
   fs.mkdirSync(path.dirname(target), {recursive: true});
-  fs.cpSync(source, staging, {
-    recursive: true,
-    filter: (from) => !from.includes('node_modules') && !from.endsWith('install.cjs')
-  });
+  fs.mkdirSync(staging, {recursive: true});
+  for (const entry of PACKAGE_ENTRIES) {
+    const from = path.join(source, entry);
+    if (!fs.existsSync(from)) continue;
+    fs.cpSync(from, path.join(staging, entry), {recursive: true});
+  }
   if (fs.existsSync(target)) {
     fs.renameSync(target, previous);
     movedPrevious = true;

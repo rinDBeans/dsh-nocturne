@@ -3,6 +3,16 @@
 版本号语义：`MAJOR.MINOR.PATCH`。`MINOR` 意味着新增可感知的能力（新的纸、光标形态、面板控件），
 `PATCH` 只修观感与缺陷。DSH 主版本跃迁时，插件跟随一次 `MAJOR`。
 
+## 0.7.0 — 2026-11-01
+
+**仓库根目录成为插件包本体。** 此前根目录只是一份私有 workspace 清单，真正的包在 `packages/dsh-nocturne/`。pnpm 从 Git 安装依赖时取的是仓库根，于是 DSH 读到一份没有 `dsh.bundle` 的清单，在插件页报「这个包没有声明组合包，不能作为插件管理」。现在 `src/`、`lib/`、`tools/`、`install.cjs`、`cordis.patch.yml` 都在根上，仓库地址装下来就是完整的组合包。
+
+- 根 `package.json` 合并为插件清单：`name`、`version`、`main`、`exports`、`files`、`dsh.bundle`，同时保留构建与测试用的 devDependencies。
+- 可以直接在 DSH 的「插件」页填写仓库地址安装，也可以照旧 `git clone` 后运行 `node install.cjs`。
+- 安装器改为白名单复制：只搬运行时要用的清单、`lib/`、patch、README 与 LICENSE，不再整目录复制，避免把 `tests/`、`_probe/` 和 `.git` 塞进档案。
+- 构建、样张与测试的路径引用同步迁移；`npm pack` 产物体积不变，仍是 6 个文件、约 50 kB。
+- 文档中的安装方式与目录说明一并更新。
+
 ## 0.6.1 — 2026-11-01
 
 - 修复深色模式下会话区与右侧栏不上纸：宿主把整张 alias token 表声明在 `body` 上，而纸色只写在了 `html` 上。自定义属性一旦在 `body` 有本地声明就不再接受继承值，所以这两处一直是用宿主的白底/黑底上色，只有走 `--dsw-specific-*` 的侧栏与输入框换上了纸。
