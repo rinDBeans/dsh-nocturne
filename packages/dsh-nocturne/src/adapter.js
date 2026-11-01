@@ -614,7 +614,18 @@ function applyTokens() {
   }
   applySurfaces();
   const map = tokenMap(p);
-  for (const [name, value] of Object.entries(map)) setOwnedStyle(root, name, value, 'important');
+  // 配色必须写在宿主声明它的那一层上。
+  //
+  // DSH 自己把整张 alias 表声明在 body 上（body{--dsw-alias-bg-base:…}、
+  // body[data-ds-dark-theme]{…}）。自定义属性只要在 body 上有一处本地声明，
+  // 就不再接受 html 继承下来的值——只写根元素的话，会话列和右侧栏永远是宿主
+  // 的白底/黑底，只有走 --dsw-specific-* 的侧栏和输入框换上了纸。
+  // 所以两处都写：根上留给 :root 规则，body 上压住宿主的表。
+  const body = document.body;
+  for (const [name, value] of Object.entries(map)) {
+    setOwnedStyle(root, name, value, 'important');
+    if (body) setOwnedStyle(body, name, value, 'important');
+  }
 }
 
 function injectStyle() {

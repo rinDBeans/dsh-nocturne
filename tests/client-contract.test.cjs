@@ -18,6 +18,8 @@ test('full mode applies paper colors to root and component surfaces', () => {
   c.applyTokens();
   assert.equal(c.rootStyle.getPropertyValue('--dsw-alias-bg-base'), c.PAPERS[c.SETTINGS.paper].paper);
   assert.ok(c.bodyStyle.getPropertyValue('--dsw-specific-bubble'));
+  // 宿主把 alias 表声明在 body 上，所以纸色也必须写在 body 上：继承值输给本地声明。
+  assert.equal(c.bodyStyle.getPropertyValue('--dsw-alias-bg-base'), c.PAPERS[c.SETTINGS.paper].paper);
 });
 
 test('restoreOwnedStyles restores preexisting inline values and priorities', () => {

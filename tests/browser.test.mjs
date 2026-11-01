@@ -41,6 +41,25 @@ const settingsShell = [
   '</body></html>'
 ].join('');
 
+/**
+ * 真实的 DSH 把整张 alias 表声明在 body 上（body{…}、body[data-ds-dark-theme]{…}），
+ * 会话列与右侧栏用 var(--dsw-alias-bg-base) 上色。自定义属性一旦在 body 上被本地
+ * 声明就不再接受 html 的继承值，所以这条夹具必须照抄这个结构，否则测试通过也说明不了什么。
+ */
+const hostShell = [
+  '<!doctype html><html><head><meta charset="utf-8"><style>',
+  'body{margin:0;--dsw-alias-bg-base:#fbfbfd;--dsw-alias-bg-layer-1:#f7f7fa;--dsw-alias-label-primary:#1b1b20;--dsw-specific-sidebar-fill:#f2f2f5;background-color:var(--dsw-alias-bg-base)}',
+  'body[data-ds-dark-theme]{--dsw-alias-bg-base:#0b0b0e;--dsw-alias-bg-layer-1:#111114;--dsw-alias-label-primary:#e8e8ec;--dsw-specific-sidebar-fill:#1a1a20}',
+  '.frame{background:var(--dsw-alias-bg-base)}.center{height:40px;background:var(--dsw-alias-bg-base)}',
+  '.rightbar{height:40px;background:var(--dsw-alias-bg-base)}.sidebar{height:40px;background:var(--dsw-specific-sidebar-fill)}',
+  '.card{height:20px;background:var(--dsw-alias-bg-layer-1);color:var(--dsw-alias-label-primary)}',
+  '</style></head><body data-ds-dark-theme="false">',
+  '<div class="frame"><div class="center">会话</div><div class="rightbar">右侧栏</div><div class="card">卡片</div></div>',
+  '<div class="sidebar">左侧栏</div>',
+  '<script>window.__ModuleLoader__={load(def){window.__plugin=def.factory(()=>({}))}};</script>',
+  '<script src="/client.js"></script></body></html>'
+].join('');
+
 before(async () => {
   if (!edgePath) return;
   server = http.createServer((req, res) => {
@@ -53,6 +72,11 @@ before(async () => {
     if (pathname === '/settings-shell') {
       res.writeHead(200, {'content-type': 'text/html; charset=utf-8'});
       res.end(settingsShell);
+      return;
+    }
+    if (pathname === '/host-shell') {
+      res.writeHead(200, {'content-type': 'text/html; charset=utf-8'});
+      res.end(hostShell);
       return;
     }
     if (pathname === '/client.js' || pathname === '/react.js' || pathname === '/react-dom.js') {
@@ -434,6 +458,60 @@ test('offline sample renders all 18 paper/theme combinations', options, async ()
       assert.ok(size[0] > 1 && size[1] > 1, paper + '/' + theme);
     }
   }
+  await assertBrowserClean(page, errors);
+  await context.close();
+});
+
+/**
+ * 回归：宿主把 alias 表声明在 body 上时，会话列与右侧栏必须也变成纸。
+ * 之前只往 html 写 token，这两处一直是宿主的白底/黑底，只有侧栏和输入框换了纸。
+ */
+test('paper reaches surfaces painted from the host body-level token table', options, async () => {
+  const context = await browser.newContext({viewport: {width: 900, height: 600}});
+  const page = await context.newPage();
+  const errors = [];
+  page.on('pageerror', (error) => errors.push(String(error)));
+  await page.goto(origin + '/host-shell');
+  await page.waitForFunction(() => Boolean(window.__dshNocturne));
+
+  const read = () => page.evaluate(() => {
+    const hex = getComputedStyle(document.documentElement).getPropertyValue('--dn-paper').trim();
+    const n = parseInt(hex.slice(1), 16);
+    const want = 'rgb(' + ((n >> 16) & 255) + ', ' + ((n >> 8) & 255) + ', ' + (n & 255) + ')';
+    const bg = (selector) => getComputedStyle(document.querySelector(selector)).backgroundColor;
+    return {
+      hex: hex, want: want,
+      body: getComputedStyle(document.body).backgroundColor,
+      center: bg('.center'), rightbar: bg('.rightbar'), sidebar: bg('.sidebar')
+    };
+  });
+
+  // 侧栏用的是 --dsw-specific-*，会在纸色上压 3% 墨——同一张纸，只是低一层。
+  const closeTo = (actual, want, tolerance = 20) => {
+    const channels = (text) => (String(text).match(/[0-9]+/g) || []).map(Number).slice(0, 3);
+    const a = channels(actual);
+    const b = channels(want);
+    assert.equal(a.length, 3, actual);
+    assert.equal(b.length, 3, want);
+    return a.every((value, index) => Math.abs(value - b[index]) <= tolerance);
+  };
+
+  const light = await read();
+  assert.equal(light.hex, '#efdfbd', 'default paper is the light parchment variant');
+  assert.equal(light.center, light.want, 'conversation column must sit on paper, not the host white');
+  assert.equal(light.rightbar, light.want, 'right column must sit on paper');
+  assert.ok(closeTo(light.sidebar, light.want), 'sidebar must sit on paper: ' + light.sidebar);
+  assert.equal(light.body, light.want);
+
+  // 宿主的明暗标记打在 body 上，浅色时值是 "false"。
+  await page.evaluate(() => document.body.setAttribute('data-ds-dark-theme', ''));
+  await page.waitForFunction(() => getComputedStyle(document.documentElement).getPropertyValue('--dn-paper').trim() === '#2d2419');
+  const dark = await read();
+  assert.equal(dark.center, dark.want, 'dark conversation column must sit on paper, not the host black');
+  assert.equal(dark.rightbar, dark.want);
+  assert.ok(closeTo(dark.sidebar, dark.want), 'dark sidebar must sit on paper: ' + dark.sidebar);
+  assert.equal(dark.body, dark.want);
+
   await assertBrowserClean(page, errors);
   await context.close();
 });
